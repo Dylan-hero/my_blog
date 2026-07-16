@@ -1,0 +1,8 @@
+const KEY='my_blog_notes_v1';
+const samples=[{id:'welcome',title:'欢迎来到我的笔记',body:'<p>这是你的个人记录空间。点击右上角“开始写作”，就可以像使用 Word 一样编辑内容。</p><h2>可以做什么？</h2><p>自动保存、撤销重做、粘贴 Word 内容，以及把文章显示在首页。</p>',updated:Date.now(),published:true},{id:'sample2',title:'从记录开始',body:'<p>不必等到想法完整才落笔。先写下一句话，知识会在反复整理中慢慢形成。</p>',updated:Date.now()-86400000,published:true}];
+function notes(){try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:samples}catch{return samples}}
+const box=document.querySelector('#posts'), list=notes().filter(x=>x.published).sort((a,b)=>b.updated-a.updated);
+document.querySelector('#count').textContent=list.length+' 篇';
+box.innerHTML=list.length?list.map(p=>`<article class="card" data-id="${p.id}"><span>${new Date(p.updated).toLocaleDateString('zh-CN')}</span><h3>${esc(p.title||'无标题文章')}</h3><p>${esc(strip(p.body)).slice(0,100)||'暂无摘要'}</p><b>阅读全文 →</b></article>`).join(''):'<div class="empty">还没有发布文章。去写作台发布第一篇吧。</div>';
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))} function strip(s){const d=document.createElement('div');d.innerHTML=s;return d.textContent||''}
+const dlg=document.querySelector('#reader');box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=list.find(x=>x.id===c.dataset.id);readTitle.textContent=p.title||'无标题文章';readDate.textContent=new Date(p.updated).toLocaleDateString('zh-CN');readBody.innerHTML=p.body;dlg.showModal()};document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
