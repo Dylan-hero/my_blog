@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css"></head>
+<body class="editor-page"><header class="top editor-top"><a class="brand" href="./">← 我的笔记</a><div class="status" id="status">已保存</div><div class="actions"><button id="exportBtn">导出备份</button><label class="file-btn">导入备份<input id="importFile" type="file" accept=".json"></label><button class="button small" id="publishBtn">发布</button></div></header>
+<div class="workspace"><aside><div class="side-head"><strong>我的文章</strong><button id="newBtn" title="新建">＋</button></div><input id="search" class="search" placeholder="搜索文章"><div id="noteList"></div></aside>
+<main class="desk"><input id="title" class="title-input" placeholder="无标题文章">
+<div class="toolbar">
+<button data-cmd="undo" title="撤销">↶</button><button data-cmd="redo" title="重做">↷</button><i></i>
+<button data-cmd="bold"><b>B</b></button><button data-cmd="italic"><em>I</em></button><button data-cmd="underline"><u>U</u></button>
+<button data-cmd="formatBlock" data-value="h2">标题</button><button data-cmd="insertUnorderedList">• 列表</button><button data-cmd="insertOrderedList">1. 列表</button>
+<button id="linkBtn">链接</button><button data-cmd="removeFormat">清除格式</button></div>
+<div id="content" class="paper prose" contenteditable="true" data-placeholder="从这里开始写作，也可以直接从 Word 粘贴……"></div>
+<div class="editor-foot"><span id="words">0 字</span><button class="danger" id="deleteBtn">删除文章</button></div></main></div>
+<script src="editor.js"></script></body></html>
