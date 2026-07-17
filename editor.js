@@ -1,5 +1,5 @@
 const KEY='my_blog_notes_v1';
-let data=load(),current=data[0]?.id||null,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false;
+let data=load(),current=data[0]?.id||null,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false;
 const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),status=$('#status');
 if(!data.length)create();
 
@@ -23,18 +23,39 @@ function count(){const t=content.innerText.trim();$('#words').textContent=(t?t.r
 title.addEventListener('input',changed);content.addEventListener('input',changed);
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();if(k==='z'){e.preventDefault();e.shiftKey?redo():undo()}else if(k==='y'){e.preventDefault();redo()}});
 content.addEventListener('paste',async e=>{
- const cb=e.clipboardData,html=cb.getData('text/html'),plain=cb.getData('text/plain');
- const images=[...cb.items].filter(i=>i.kind==='file'&&i.type.startsWith('image/')).map(i=>i.getAsFile()).filter(Boolean);
- if(!html&&!plain&&images.length){e.preventDefault();const range=getRange();for(const f of images)insertImage(await compressImage(f),range);changed();return}
- if(html||plain){
-   e.preventDefault();let broken=0;
-   if(html){const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html)}
-   else insertText(plain);
-   if(images.length&&broken){const range=getRange();for(const f of images)insertImage(await compressImage(f),range)}
-   changed();
-   if(broken>images.length)setTimeout(()=>alert('文字已完整粘贴。Word 中有 '+broken+' 张图片属于本地临时文件，浏览器无法直接读取；请使用“插入图片”一次多选这些原图。'),50);
+ const cb=e.clipboardData;
+ const types=[...cb.types],html=cb.getData('text/html')||'',plain=cb.getData('text/plain')||'';
+ const files=[...cb.items].filter(i=>i.kind==='file').map(i=>i.getAsFile()).filter(Boolean);
+ const images=files.filter(f=>f.type.startsWith('image/'));
+ const isWord=/mso-|urn:schemas-microsoft-com|Microsoft Word|WordDocument/i.test(html);
+ e.preventDefault();
+ let broken=0,mode='';
+ if(isWord&&plain){
+   insertPlainWithLines(plain);mode='Word纯文字完整模式';
+ }else if(html){
+   const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html);mode='HTML格式模式';
+ }else if(plain){
+   insertPlainWithLines(plain);mode='纯文字模式';
  }
+ if(images.length){
+   const range=getRange();for(const f of images)insertImage(await compressImage(f),range);
+ }
+ changed();
+ const report='剪贴板检查结果：\\n数据类型：'+(types.join(', ')||'无')+
+   '\\n纯文字长度：'+plain.length+' 字符'+
+   '\\nHTML长度：'+html.length+' 字符'+
+   '\\n是否来自Word：'+(isWord?'是':'否')+
+   '\\n图片文件：'+images.length+' 个'+
+   '\\n失效图片引用：'+broken+' 个'+
+   '\\n本次处理：'+(mode||'未发现可粘贴内容');
+ if(diagnosticMode){diagnosticMode=false;setTimeout(()=>alert(report),100)}
+ else if(isWord&&broken>images.length)setTimeout(()=>alert('文字已按完整模式粘贴。Word没有把其中 '+broken+' 张图片作为真实图片交给浏览器，请点击“插入图片”批量选择原图。需要详细信息可点“检查剪贴板”。'),100);
 });
+function insertPlainWithLines(text){
+ content.focus();const r=getRange(),frag=document.createDocumentFragment(),lines=text.replace(/\r\n/g,'\n').split('\n');
+ lines.forEach((line,i)=>{if(i)frag.appendChild(document.createElement('br'));frag.appendChild(document.createTextNode(line))});
+ r.deleteContents();r.insertNode(frag);r.collapse(false);const s=getSelection();s.removeAllRanges();s.addRange(r);
+}
 function sanitizeWordHtml(raw){const doc=new DOMParser().parseFromString(raw,'text/html');doc.querySelectorAll('script,style,meta,link,object,iframe').forEach(x=>x.remove());let broken=0;doc.querySelectorAll('*').forEach(el=>{[...el.attributes].forEach(a=>{if(a.name.startsWith('on')||['class','id','lang'].includes(a.name))el.removeAttribute(a.name)});if(el.tagName==='IMG'){const src=el.getAttribute('src')||'';if(!src||/^(file:|blob:|cid:)/i.test(src)){broken++;el.remove()}}});return{html:doc.body.innerHTML,broken}}
 function insertHtml(html){content.focus();document.execCommand('insertHTML',false,html)}
 function insertText(text){content.focus();document.execCommand('insertText',false,text)}
@@ -47,6 +68,7 @@ $('#noteList').onclick=e=>{const b=e.target.closest('.note');if(b){save();curren
 $('#search').oninput=e=>render(e.target.value);
 document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{const cmd=b.dataset.cmd;if(cmd==='undo')return undo();if(cmd==='redo')return redo();content.focus();document.execCommand(cmd,false,b.dataset.value||null);changed()});
 $('#linkBtn').onclick=()=>{const u=prompt('请输入链接地址：','https://');if(u){content.focus();document.execCommand('createLink',false,u);changed()}};
+$('#clipboardBtn').onclick=()=>{diagnosticMode=true;content.focus();alert('现在请回到正文区域，按 Ctrl+V 粘贴刚才从 Word 复制的内容。粘贴后会显示检查结果。')};
 $('#imageFile').onchange=async e=>{content.focus();const range=getRange();for(const file of e.target.files)insertImage(await compressImage(file),range);e.target.value='';changed()};
 $('#publishBtn').onclick=()=>{const n=data.find(x=>x.id===current);n.published=!n.published;save();show();alert(n.published?'已发布：现在可在本机浏览器的首页看到。':'已取消发布')};
 $('#deleteBtn').onclick=()=>{if(!confirm('确定删除这篇文章吗？此操作不能撤销。'))return;data=data.filter(x=>x.id!==current);current=data[0]?.id||null;persist();current?show():create();render()};
