@@ -24,13 +24,17 @@ title.addEventListener('input',changed);content.addEventListener('input',changed
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();if(k==='z'){e.preventDefault();e.shiftKey?redo():undo()}else if(k==='y'){e.preventDefault();redo()}});
 content.addEventListener('paste',async e=>{
  const cb=e.clipboardData;
- const types=[...cb.types],html=cb.getData('text/html')||'',plain=cb.getData('text/plain')||'';
+ const types=[...cb.types],html=cb.getData('text/html')||'',plain=cb.getData('text/plain')||'',rtf=cb.getData('text/rtf')||'';
  const files=[...cb.items].filter(i=>i.kind==='file').map(i=>i.getAsFile()).filter(Boolean);
  const images=files.filter(f=>f.type.startsWith('image/'));
  const isWord=/mso-|urn:schemas-microsoft-com|Microsoft Word|WordDocument/i.test(html);
  e.preventDefault();
  let broken=0,mode='';
- if(isWord&&plain){
+ if(rtf&&!html){
+   const parsed=parseRtf(rtf),best=parsed.text.length>plain.length?parsed.text:plain;
+   insertPlainWithLines(best);mode='RTF兼容模式';
+   if(parsed.images.length){const range=getRange();for(const src of parsed.images)insertImage(src,range)}
+ }else if(isWord&&plain){
    insertPlainWithLines(plain);mode='Word纯文字完整模式';
  }else if(html){
    const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html);mode='HTML格式模式';
@@ -55,6 +59,38 @@ function insertPlainWithLines(text){
  content.focus();const r=getRange(),frag=document.createDocumentFragment(),lines=text.replace(/\r\n/g,'\n').split('\n');
  lines.forEach((line,i)=>{if(i)frag.appendChild(document.createElement('br'));frag.appendChild(document.createTextNode(line))});
  r.deleteContents();r.insertNode(frag);r.collapse(false);const s=getSelection();s.removeAllRanges();s.addRange(r);
+}
+function parseRtf(rtf){
+ const images=[];
+ const pict=/\{\\pict[\s\S]*?\}/gi;
+ rtf=rtf.replace(pict,block=>{
+   const mime=/\\pngblip/i.test(block)?'image/png':(/\\jpe?gblip/i.test(block)?'image/jpeg':'');
+   const runs=block.match(/[0-9a-fA-F][0-9a-fA-F\s]{199,}/g)||[];
+   const hex=runs.map(x=>x.replace(/\s/g,'')).sort((a,b)=>b.length-a.length)[0]||'';
+   if(mime&&hex.length>200){try{let bin='';for(let i=0;i<hex.length-1;i+=2)bin+=String.fromCharCode(parseInt(hex.slice(i,i+2),16));images.push('data:'+mime+';base64,'+btoa(bin))}catch(e){}}
+   return ' ';
+ });
+ let out='',i=0,uc=1,skip=0,stack=[],ign=false;
+ const destinations=new Set(['fonttbl','colortbl','stylesheet','info','header','footer','object','datastore','themedata','xmlnstbl','listtable','listoverridetable','generator']);
+ while(i<rtf.length){
+   const c=rtf[i];
+   if(c==='{'){stack.push({uc,ign});i++;continue}
+   if(c==='}'){const s=stack.pop();if(s){uc=s.uc;ign=s.ign}i++;continue}
+   if(c!=='\\'){if(!ign&&skip===0&&c!=='\r'&&c!=='\n')out+=c;else if(skip>0)skip--;i++;continue}
+   i++;const n=rtf[i];
+   if(n==='\\'||n==='{'||n==='}'){if(!ign&&skip===0)out+=n;else if(skip>0)skip--;i++;continue}
+   if(n==="'"){const h=rtf.slice(i+1,i+3);if(!ign&&skip===0)out+=new TextDecoder('windows-1252').decode(Uint8Array.of(parseInt(h,16)));else if(skip>0)skip--;i+=3;continue}
+   if(n==='*'){ign=true;i++;continue}
+   const m=rtf.slice(i).match(/^([a-zA-Z]+)(-?\d+)? ?/);
+   if(!m){i++;continue}
+   const word=m[1].toLowerCase(),num=m[2]===undefined?null:Number(m[2]);i+=m[0].length;
+   if(destinations.has(word)){ign=true;continue}
+   if(ign)continue;
+   if(word==='uc'){uc=num||1;continue}
+   if(word==='u'){let code=num||0;if(code<0)code+=65536;out+=String.fromCharCode(code);skip=uc;continue}
+   if(word==='par'||word==='line')out+='\n';else if(word==='tab')out+='\t';
+ }
+ return{text:out.replace(/\n{3,}/g,'\n\n').trim(),images};
 }
 function sanitizeWordHtml(raw){const doc=new DOMParser().parseFromString(raw,'text/html');doc.querySelectorAll('script,style,meta,link,object,iframe').forEach(x=>x.remove());let broken=0;doc.querySelectorAll('*').forEach(el=>{[...el.attributes].forEach(a=>{if(a.name.startsWith('on')||['class','id','lang'].includes(a.name))el.removeAttribute(a.name)});if(el.tagName==='IMG'){const src=el.getAttribute('src')||'';if(!src||/^(file:|blob:|cid:)/i.test(src)){broken++;el.remove()}}});return{html:doc.body.innerHTML,broken}}
 function insertHtml(html){content.focus();document.execCommand('insertHTML',false,html)}
