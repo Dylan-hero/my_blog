@@ -2,11 +2,15 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260723-1">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260723-2">
 </head>
 <body class="editor-page">
 <header class="top editor-top">
   <a class="brand" href="./">← 我的笔记</a>
+  <label class="autosave-control" title="关闭后请使用保存按钮或 Ctrl+S">
+    <span>自动保存</span><input id="autoSaveToggle" type="checkbox"><i></i>
+  </label>
+  <button id="saveBtn" class="save-button" title="保存（Ctrl+S）">▣ 保存</button>
   <div class="status" id="status">已保存</div>
   <div class="actions">
     <button id="exportBtn">导出备份</button>
@@ -82,5 +86,5 @@
     <div class="editor-foot"><span id="words">0 字</span><span class="hint">标题将自动出现在左侧导航窗格</span><button class="danger" id="deleteBtn">删除文章</button></div>
   </main>
 </div>
-<script src="editor.js?v=20260723-1"></script>
+<script src="editor.js?v=20260723-2"></script>
 </body></html>
