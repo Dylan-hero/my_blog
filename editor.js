@@ -1,12 +1,12 @@
 const KEY='my_blog_notes_v1';
-let data=load(),current=data[0]?.id||null,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false;
+let data=load(),current=data[0]?.id||null,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false,savedRange=null;
 const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),status=$('#status');
 if(!data.length)create();
 
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?x:[]}catch{return[]}}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));status.textContent='已保存'}catch(e){status.textContent='存储空间不足';alert('文章中的图片已超过浏览器存储容量。文字不会被限制，请导出备份，并删除或压缩部分图片。')}}
-function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.updated=Date.now();persist();render();count()}
-function changed(){if(restoring)return;status.textContent='正在保存…';clearTimeout(saveTimer);saveTimer=setTimeout(save,600);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count()}
+function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.updated=Date.now();persist();render();count();updateOutline()}
+function changed(){if(restoring)return;status.textContent='正在保存…';clearTimeout(saveTimer);saveTimer=setTimeout(save,600);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
 function state(){return{title:title.value,body:content.innerHTML}}
 function recordHistory(){const s=state(),last=history[historyIndex];if(last&&last.title===s.title&&last.body===s.body)return;history=history.slice(0,historyIndex+1);history.push(s);if(history.length>100)history.shift();historyIndex=history.length-1}
 function resetHistory(){history=[state()];historyIndex=0}
@@ -15,7 +15,7 @@ function undo(){clearTimeout(historyTimer);recordHistory();if(historyIndex>0)res
 function redo(){if(historyIndex<history.length-1)restore(historyIndex+1)}
 
 function create(){const n={id:crypto.randomUUID?.()||Date.now().toString(),title:'',body:'',updated:Date.now(),published:false};data.unshift(n);current=n.id;persist();show();render()}
-function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=n.title||'';content.innerHTML=n.body||'';restoring=false;$('#publishBtn').textContent=n.published?'取消发布':'发布';count();resetHistory()}
+function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=n.title||'';content.innerHTML=n.body||'';restoring=false;$('#publishBtn').textContent=n.published?'取消发布':'发布';count();resetHistory();updateOutline()}
 function render(filter=''){const q=filter.toLowerCase();$('#noteList').innerHTML=data.filter(n=>(n.title||'无标题文章').toLowerCase().includes(q)).sort((a,b)=>b.updated-a.updated).map(n=>`<button class="note ${n.id===current?'active':''}" data-id="${n.id}"><b>${escapeHtml(n.title||'无标题文章')}</b><span>${n.published?'● 已发布 · ':''}${new Date(n.updated).toLocaleDateString('zh-CN')}</span></button>`).join('')}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function count(){const t=content.innerText.trim();$('#words').textContent=(t?t.replace(/\s/g,'').length:0)+' 字'}
@@ -39,7 +39,8 @@ content.addEventListener('paste',async e=>{
  }else if(html){
    const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html);mode='HTML格式模式';
  }else if(plain){
-   insertPlainWithLines(plain);mode='纯文字模式';
+   if(looksLikeTable(plain)){insertTableFromTSV(plain);mode='制表符表格模式'}
+   else{insertPlainWithLines(plain);mode='纯文字模式'}
  }
  if(images.length){
    const range=getRange();for(const f of images)insertImage(await compressImage(f),range);
@@ -93,16 +94,50 @@ function parseRtf(rtf){
  return{text:out.replace(/\n{3,}/g,'\n\n').trim(),images};
 }
 function sanitizeWordHtml(raw){const doc=new DOMParser().parseFromString(raw,'text/html');doc.querySelectorAll('script,style,meta,link,object,iframe').forEach(x=>x.remove());let broken=0;doc.querySelectorAll('*').forEach(el=>{[...el.attributes].forEach(a=>{if(a.name.startsWith('on')||['class','id','lang'].includes(a.name))el.removeAttribute(a.name)});if(el.tagName==='IMG'){const src=el.getAttribute('src')||'';if(!src||/^(file:|blob:|cid:)/i.test(src)){broken++;el.remove()}}});return{html:doc.body.innerHTML,broken}}
-function insertHtml(html){content.focus();document.execCommand('insertHTML',false,html)}
-function insertText(text){content.focus();document.execCommand('insertText',false,text)}
-function getRange(){content.focus();const s=getSelection();if(s.rangeCount&&content.contains(s.anchorNode))return s.getRangeAt(0);const r=document.createRange();r.selectNodeContents(content);r.collapse(false);return r}
+function insertHtml(html){restoreSelection();document.execCommand('insertHTML',false,html);rememberRange()}
+function insertText(text){restoreSelection();document.execCommand('insertText',false,text);rememberRange()}
+function getRange(){const s=getSelection();if(s.rangeCount&&content.contains(s.anchorNode))return s.getRangeAt(0);if(savedRange)return savedRange.cloneRange();const r=document.createRange();r.selectNodeContents(content);r.collapse(false);return r}
+function rememberRange(){const s=getSelection();if(s.rangeCount&&content.contains(s.anchorNode))savedRange=s.getRangeAt(0).cloneRange()}
+function restoreSelection(){content.focus();const s=getSelection();s.removeAllRanges();s.addRange(savedRange?savedRange.cloneRange():getRange())}
 function insertImage(src,range){const img=document.createElement('img');img.src=src;img.alt='文章图片';range.deleteContents();range.insertNode(img);range.setStartAfter(img);range.collapse(true);const s=getSelection();s.removeAllRanges();s.addRange(range)}
 function compressImage(file){return new Promise((resolve,reject)=>{const img=new Image(),u=URL.createObjectURL(file);img.onload=()=>{const max=1400,scale=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');c.width=Math.round(img.width*scale);c.height=Math.round(img.height*scale);c.getContext('2d').drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);resolve(c.toDataURL('image/jpeg',.72))};img.onerror=reject;img.src=u})}
 
+
+function looksLikeTable(text){const lines=text.replace(/\r\n/g,'\n').split('\n').filter(x=>x.trim());return lines.length>1&&lines.filter(x=>x.includes('\t')).length>=2}
+function insertTableFromTSV(text){const rows=text.replace(/\r\n/g,'\n').split('\n').filter((x,i,a)=>x.length||i<a.length-1).map(x=>x.split('\t'));const cols=Math.max(...rows.map(r=>r.length));let html='<table><tbody>';rows.forEach((row,ri)=>{html+='<tr>';for(let i=0;i<cols;i++){const tag=ri===0?'th':'td';html+='<'+tag+'>'+escapeHtml(row[i]||'')+'</'+tag+'>'}html+='</tr>'});insertHtml(html+'</tbody></table><p><br></p>')}
+function makeTable(rows,cols){let html='<table><tbody>';for(let r=0;r<rows;r++){html+='<tr>';for(let c=0;c<cols;c++){const tag=r===0?'th':'td';html+='<'+tag+'><br></'+tag+'>'}html+='</tr>'}insertHtml(html+'</tbody></table><p><br></p>');changed()}
+function currentCell(){const s=getSelection();if(!s.rangeCount)return null;let n=s.anchorNode?.nodeType===3?s.anchorNode.parentElement:s.anchorNode;return n?.closest?.('td,th')||null}
+function tableAction(type){restoreSelection();const cell=currentCell(),table=cell?.closest('table');if(!cell||!table){alert('请先把光标放进需要编辑的表格单元格中。');return}const row=cell.parentElement,index=[...row.children].indexOf(cell);
+ if(type==='addRow'){const n=document.createElement('tr');for(let i=0;i<row.children.length;i++){const td=document.createElement('td');td.innerHTML='<br>';n.appendChild(td)}row.after(n)}
+ if(type==='addCol'){[...table.rows].forEach((r,ri)=>{const tag=ri===0?'th':'td',x=document.createElement(tag);x.innerHTML='<br>';r.children[index]?.after(x)})}
+ if(type==='delRow'){row.remove();if(!table.rows.length)table.remove()}
+ if(type==='delCol'){[...table.rows].forEach(r=>r.children[index]?.remove());if(!table.rows[0]?.cells.length)table.remove()}
+ if(type==='delTable'&&confirm('确定删除整个表格吗？'))table.remove();changed()
+}
+function getBlocksInSelection(){const r=getRange(),all=[...content.querySelectorAll('p,div,h1,h2,h3,h4,blockquote,li,td,th')];const hit=all.filter(x=>{try{return r.intersectsNode(x)}catch{return false}});if(hit.length)return hit.filter(x=>!hit.some(y=>y!==x&&y.contains(x)));let n=r.startContainer.nodeType===3?r.startContainer.parentElement:r.startContainer;return[n.closest('p,div,h1,h2,h3,h4,blockquote,li,td,th')||content]}
+function applyLineHeight(value){restoreSelection();getBlocksInSelection().forEach(x=>x.style.lineHeight=value);changed()}
+function applyCommand(cmd,value=null){restoreSelection();document.execCommand('styleWithCSS',false,true);document.execCommand(cmd,false,value);rememberRange();changed()}
+function setFontSize(value){restoreSelection();document.execCommand('fontSize',false,value);content.querySelectorAll('font[size]').forEach(x=>{const map={1:'10px',2:'12px',3:'14px',4:'16px',5:'18px',6:'24px',7:'32px'};x.style.fontSize=map[x.getAttribute('size')]||'14px';x.removeAttribute('size')});rememberRange();changed()}
+function headingItems(){return[...content.querySelectorAll('h1,h2,h3,h4')].filter(h=>!h.closest('.doc-toc')).map((h,i)=>{if(!h.id)h.id='section-'+Date.now().toString(36)+'-'+i;return h})}
+function updateOutline(){const box=$('#outlineList');if(!box)return;const hs=headingItems();box.innerHTML=hs.length?hs.map(h=>'<button class="level-'+h.tagName.slice(1)+'" data-target="'+h.id+'">'+escapeHtml(h.innerText.trim()||'未命名标题')+'</button>').join(''):'<div class="outline-empty">把段落设置为“标题 1～4”，这里会自动生成导航。</div>'}
+function insertOrUpdateTOC(){const hs=headingItems();if(!hs.length){alert('请先使用“标题级别”设置至少一个标题。');return}const items=hs.map(h=>'<li class="toc-l'+h.tagName.slice(1)+'"><a href="#'+h.id+'">'+escapeHtml(h.innerText.trim()||'未命名标题')+'</a></li>').join('');let toc=content.querySelector('.doc-toc');if(toc)toc.innerHTML='<h2>目录</h2><ol>'+items+'</ol>';else insertHtml('<nav class="doc-toc" contenteditable="false"><h2>目录</h2><ol>'+items+'</ol></nav><p><br></p>');changed()}
+document.addEventListener('selectionchange',rememberRange);
+document.querySelectorAll('.pane-tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.pane-tabs button').forEach(x=>x.classList.toggle('active',x===b));$('#notesPane').hidden=b.dataset.pane!=='notes';$('#outlinePane').hidden=b.dataset.pane!=='outline';if(b.dataset.pane==='outline')updateOutline()});
+$('#outlineList').onclick=e=>{const b=e.target.closest('[data-target]');if(!b)return;const h=document.getElementById(b.dataset.target);h?.scrollIntoView({behavior:'smooth',block:'center'});h?.classList.add('outline-flash');setTimeout(()=>h?.classList.remove('outline-flash'),800)};
+$('#fontFamily').onchange=e=>applyCommand('fontName',e.target.value);
+$('#fontSize').onchange=e=>setFontSize(e.target.value);
+$('#textColor').oninput=e=>{document.documentElement.style.setProperty('--tool-color',e.target.value);applyCommand('foreColor',e.target.value)};
+$('#highlightColor').oninput=e=>applyCommand('hiliteColor',e.target.value);
+$('#blockFormat').onchange=e=>{applyCommand('formatBlock',e.target.value);updateOutline()};
+$('#lineHeight').onchange=e=>applyLineHeight(e.target.value);
+$('#tableBtn').onclick=()=>{const r=Math.min(30,Math.max(1,parseInt(prompt('表格行数（1～30）：','4'))||0)),c=Math.min(12,Math.max(1,parseInt(prompt('表格列数（1～12）：','3'))||0));if(r&&c)makeTable(r,c)};
+$('#tocBtn').onclick=insertOrUpdateTOC;
+$('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>tableAction('addCol');$('#delRowBtn').onclick=()=>tableAction('delRow');$('#delColBtn').onclick=()=>tableAction('delCol');$('#delTableBtn').onclick=()=>tableAction('delTable');
+content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
 $('#newBtn').onclick=create;
 $('#noteList').onclick=e=>{const b=e.target.closest('.note');if(b){save();current=b.dataset.id;show();render()}};
 $('#search').oninput=e=>render(e.target.value);
-document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{const cmd=b.dataset.cmd;if(cmd==='undo')return undo();if(cmd==='redo')return redo();content.focus();document.execCommand(cmd,false,b.dataset.value||null);changed()});
+document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{const cmd=b.dataset.cmd;if(cmd==='undo')return undo();if(cmd==='redo')return redo();applyCommand(cmd,b.dataset.value||null)});
 $('#linkBtn').onclick=()=>{const u=prompt('请输入链接地址：','https://');if(u){content.focus();document.execCommand('createLink',false,u);changed()}};
 $('#clipboardBtn').onclick=()=>{diagnosticMode=true;content.focus();alert('现在请回到正文区域，按 Ctrl+V 粘贴刚才从 Word 复制的内容。粘贴后会显示检查结果。')};
 $('#imageFile').onchange=async e=>{content.focus();const range=getRange();for(const file of e.target.files)insertImage(await compressImage(file),range);e.target.value='';changed()};
