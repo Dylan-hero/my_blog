@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260723-2">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260723-3">
 </head>
 <body class="editor-page">
 <header class="top editor-top">
@@ -15,7 +15,7 @@
   <div class="actions">
     <button id="exportBtn">导出备份</button>
     <label class="file-btn">导入备份<input id="importFile" type="file" accept=".json"></label>
-    <button class="button small" id="publishBtn">发布</button>
+    <button id="draftBtn" title="只保存草稿，不更新已发布内容">存入草稿箱</button><button id="unpublishBtn" hidden>取消发布</button><button class="button small" id="publishBtn">发布</button>
   </div>
 </header>
 <div class="workspace">
@@ -86,5 +86,5 @@
     <div class="editor-foot"><span id="words">0 字</span><span class="hint">标题将自动出现在左侧导航窗格</span><button class="danger" id="deleteBtn">删除文章</button></div>
   </main>
 </div>
-<script src="editor.js?v=20260723-2"></script>
+<script src="editor.js?v=20260723-3"></script>
 </body></html>
