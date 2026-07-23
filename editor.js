@@ -7,14 +7,14 @@ const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),sta
 if(!data.length)create();
 
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?x:[]}catch{return[]}}
-function hasDraft(n){return n&&('draftTitle'in n||'draftBody'in n)}
-function editTitle(n){return hasDraft(n)?(n.draftTitle||''):(n?.title||'')}
-function editBody(n){return hasDraft(n)?(n.draftBody||''):(n?.body||'')}
+function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
+function editTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n?.title||'')}
+function editBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n?.body||'')}
 function savedLabel(){const n=data.find(x=>x.id===current);if(n?.published&&hasDraft(n))return'草稿已保存 · 线上仍为旧版本';if(n?.published)return'已保存 · 已发布';return'已存入草稿箱'}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));dirty=false;status.textContent=savedLabel()}catch(e){status.textContent='存储空间不足';alert('文章中的图片已超过浏览器存储容量。文字不会被限制，请导出备份，并删除或压缩部分图片。')}}
-function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;if(n.published&&n.title===title.value&&n.body===content.innerHTML){delete n.draftTitle;delete n.draftBody}else{n.draftTitle=title.value;n.draftBody=content.innerHTML}n.updated=Date.now();persist();render();count();updateOutline();updatePublishControls()}
-function publishCurrent(){const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftTitle;delete n.draftBody;dirty=false;persist();render();show();alert('已发布。当前设备首页会立即显示这个版本；接入云数据库后，其他电脑也能看到。')}
-function unpublishCurrent(){const n=data.find(x=>x.id===current);if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();persist();show();render()}
+function persist(){try{const raw=JSON.stringify(data);localStorage.setItem(KEY,raw);if(!localStorage.getItem(KEY))throw new Error('verify failed');dirty=false;status.textContent=savedLabel();return true}catch(e){status.textContent='草稿保存失败 · 存储空间不足';alert('草稿没有写入成功。当前文章中的图片可能超过浏览器本地存储容量，请先导出备份、删除部分大图，或等待接入云端存储。');return false}}
+function save(forceDraft=false){if(!current)return false;const n=data.find(x=>x.id===current);if(!n)return false;const same=n.published&&n.title===title.value&&n.body===content.innerHTML;if(same&&!forceDraft){delete n.draftSaved;delete n.draftTitle;delete n.draftBody}else{n.draftSaved=true;if(same){delete n.draftTitle;delete n.draftBody}else{n.draftTitle=title.value;n.draftBody=content.innerHTML}}n.updated=Date.now();const ok=persist();render();count();updateOutline();updatePublishControls();return ok}
+function publishCurrent(){const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftSaved;delete n.draftTitle;delete n.draftBody;dirty=false;persist();render();show();alert('已发布。当前设备首页会立即显示这个版本；接入云数据库后，其他电脑也能看到。')}
+function unpublishCurrent(){const n=data.find(x=>x.id===current);if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftSaved=true;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();persist();show();render()}
 function updatePublishControls(){const n=data.find(x=>x.id===current);if(!n)return;$('#publishBtn').textContent=n.published?(dirty||hasDraft(n)?'发布更新':'重新发布'):'发布';$('#unpublishBtn').hidden=!n.published}
 function resolvePending(action){if(!dirty)return true;if(confirm('当前内容还没有保存。是否先存入草稿箱，再'+action+'？')){save();return true}return confirm('不保存这些修改，直接'+action+'？')}
 function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存草稿…':'有未保存的草稿';updatePublishControls();clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
@@ -149,7 +149,7 @@ content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a
 autoSaveToggle.checked=autoSave;
 autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
 $('#saveBtn').onclick=()=>{clearTimeout(saveTimer);save()};
-$('#draftBtn').onclick=()=>{clearTimeout(saveTimer);save();alert('已经存入草稿箱，不会改变当前已发布版本。')};
+$('#draftBtn').onclick=()=>{clearTimeout(saveTimer);if(save(true))alert('已经存入草稿箱。返回主页后点击“草稿箱”即可看到。')};
 $('#newBtn').onclick=create;
 $('#noteList').onclick=e=>{const b=e.target.closest('.note');if(!b||b.dataset.id===current)return;if(!resolvePending('切换文章'))return;current=b.dataset.id;show();render()};
 $('#search').oninput=e=>render(e.target.value);
