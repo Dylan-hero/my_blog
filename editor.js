@@ -49,6 +49,7 @@ content.addEventListener('paste',async e=>{
  const report='剪贴板检查结果：\\n数据类型：'+(types.join(', ')||'无')+
    '\\n纯文字长度：'+plain.length+' 字符'+
    '\\nHTML长度：'+html.length+' 字符'+
+   '\\nRTF长度：'+rtf.length+' 字符'+
    '\\n是否来自Word：'+(isWord?'是':'否')+
    '\\n图片文件：'+images.length+' 个'+
    '\\n失效图片引用：'+broken+' 个'+
@@ -130,7 +131,7 @@ $('#textColor').oninput=e=>{document.documentElement.style.setProperty('--tool-c
 $('#highlightColor').oninput=e=>applyCommand('hiliteColor',e.target.value);
 $('#blockFormat').onchange=e=>{applyCommand('formatBlock',e.target.value);updateOutline()};
 $('#lineHeight').onchange=e=>applyLineHeight(e.target.value);
-$('#tableBtn').onclick=()=>{const r=Math.min(30,Math.max(1,parseInt(prompt('表格行数（1～30）：','4'))||0)),c=Math.min(12,Math.max(1,parseInt(prompt('表格列数（1～12）：','3'))||0));if(r&&c)makeTable(r,c)};
+$('#tableBtn').onclick=()=>{const rv=prompt('表格行数（1～30）：','4');if(rv===null)return;const cv=prompt('表格列数（1～12）：','3');if(cv===null)return;const r=Math.min(30,Math.max(1,parseInt(rv)||1)),c=Math.min(12,Math.max(1,parseInt(cv)||1));makeTable(r,c)};
 $('#tocBtn').onclick=insertOrUpdateTOC;
 $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>tableAction('addCol');$('#delRowBtn').onclick=()=>tableAction('delRow');$('#delColBtn').onclick=()=>tableAction('delCol');$('#delTableBtn').onclick=()=>tableAction('delTable');
 content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
