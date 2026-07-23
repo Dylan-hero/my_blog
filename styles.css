@@ -7,3 +7,5 @@
 .outline-flash{animation:outlineFlash .8s ease}@keyframes outlineFlash{0%,100%{background:transparent}40%{background:#fff2a8}}
 
 .autosave-control{display:flex;align-items:center;gap:7px;margin-left:22px;font-size:13px;color:#4f5458;cursor:pointer}.autosave-control input{position:absolute;opacity:0;pointer-events:none}.autosave-control i{position:relative;width:34px;height:18px;border-radius:20px;background:#aeb4ba;transition:.2s}.autosave-control i:after{content:"";position:absolute;width:14px;height:14px;left:2px;top:2px;border-radius:50%;background:white;box-shadow:0 1px 3px #0004;transition:.2s}.autosave-control input:checked+i{background:#4b8fda}.autosave-control input:checked+i:after{transform:translateX(16px)}.save-button{margin-left:10px;border:1px solid #c7ccd1;background:white;border-radius:4px;padding:5px 10px;cursor:pointer}.save-button:hover{background:#edf2f6}.reader-actions{display:flex;justify-content:flex-end;margin-top:35px;padding-top:18px;border-top:1px solid #e1ddd5}
+
+#draftBtn{color:#315d82;background:#eef6fc;border-color:#b9d3e7}.note span{line-height:1.45}
