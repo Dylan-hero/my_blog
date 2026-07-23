@@ -1,13 +1,86 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css"></head>
-<body class="editor-page"><header class="top editor-top"><a class="brand" href="./">← 我的笔记</a><div class="status" id="status">已保存</div><div class="actions"><button id="exportBtn">导出备份</button><label class="file-btn">导入备份<input id="importFile" type="file" accept=".json"></label><button class="button small" id="publishBtn">发布</button></div></header>
-<div class="workspace"><aside><div class="side-head"><strong>我的文章</strong><button id="newBtn" title="新建">＋</button></div><input id="search" class="search" placeholder="搜索文章"><div id="noteList"></div></aside>
-<main class="desk"><input id="title" class="title-input" placeholder="无标题文章">
-<div class="toolbar">
-<button data-cmd="undo" title="撤销">↶</button><button data-cmd="redo" title="重做">↷</button><i></i>
-<button data-cmd="bold"><b>B</b></button><button data-cmd="italic"><em>I</em></button><button data-cmd="underline"><u>U</u></button>
-<button data-cmd="formatBlock" data-value="h2">标题</button><button data-cmd="insertUnorderedList">• 列表</button><button data-cmd="insertOrderedList">1. 列表</button>
-<button id="linkBtn">链接</button><label class="image-btn">插入图片<input id="imageFile" type="file" accept="image/*" multiple></label><button id="clipboardBtn" title="点击后从 Word 粘贴一次">检查剪贴板</button><button data-cmd="removeFormat">清除格式</button></div>
-<div id="content" class="paper prose" contenteditable="true" data-placeholder="从这里开始写作，也可以直接从 Word 粘贴……"></div>
-<div class="editor-foot"><span id="words">0 字</span><button class="danger" id="deleteBtn">删除文章</button></div></main></div>
-<script src="editor.js?v=20260717-2"></script></body></html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260723-1">
+</head>
+<body class="editor-page">
+<header class="top editor-top">
+  <a class="brand" href="./">← 我的笔记</a>
+  <div class="status" id="status">已保存</div>
+  <div class="actions">
+    <button id="exportBtn">导出备份</button>
+    <label class="file-btn">导入备份<input id="importFile" type="file" accept=".json"></label>
+    <button class="button small" id="publishBtn">发布</button>
+  </div>
+</header>
+<div class="workspace">
+  <aside class="left-pane">
+    <div class="pane-tabs"><button class="active" data-pane="notes">文章</button><button data-pane="outline">导航</button></div>
+    <section id="notesPane">
+      <div class="side-head"><strong>我的文章</strong><button id="newBtn" title="新建文章">＋</button></div>
+      <input id="search" class="search" placeholder="搜索文章"><div id="noteList"></div>
+    </section>
+    <section id="outlinePane" hidden>
+      <div class="outline-head"><strong>导航窗格</strong><span>按标题生成</span></div>
+      <div id="outlineList" class="outline-list"></div>
+    </section>
+  </aside>
+  <main class="desk">
+    <input id="title" class="title-input" placeholder="无标题文章">
+    <div class="ribbon" id="ribbon">
+      <div class="ribbon-group history-group">
+        <div class="ribbon-row"><button data-cmd="undo" title="撤销 Ctrl+Z">↶</button><button data-cmd="redo" title="重做 Ctrl+Y">↷</button></div>
+        <span>历史</span>
+      </div>
+      <div class="ribbon-group font-group">
+        <div class="ribbon-row">
+          <select id="fontFamily" title="字体">
+            <option value="Microsoft YaHei">微软雅黑</option><option value="SimSun">宋体</option>
+            <option value="KaiTi">楷体</option><option value="SimHei">黑体</option>
+            <option value="Arial">Arial</option><option value="Times New Roman">Times New Roman</option>
+            <option value="Consolas">Consolas</option>
+          </select>
+          <select id="fontSize" title="字号">
+            <option value="2">小五</option><option value="3" selected>五号</option><option value="4">小四</option>
+            <option value="5">三号</option><option value="6">二号</option><option value="7">一号</option>
+          </select>
+        </div>
+        <div class="ribbon-row">
+          <button data-cmd="bold"><b>B</b></button><button data-cmd="italic"><em>I</em></button><button data-cmd="underline"><u>U</u></button>
+          <label class="color-tool" title="字体颜色"><span>A</span><input id="textColor" type="color" value="#c00000"></label>
+          <label class="color-tool highlight-tool" title="填充/突出显示颜色"><span>▰</span><input id="highlightColor" type="color" value="#fff200"></label>
+          <button data-cmd="removeFormat" title="清除格式">Tx</button>
+        </div>
+        <span>字体</span>
+      </div>
+      <div class="ribbon-group paragraph-group">
+        <div class="ribbon-row">
+          <select id="blockFormat" title="标题级别"><option value="p">正文</option><option value="h1">标题 1</option><option value="h2">标题 2</option><option value="h3">标题 3</option><option value="h4">标题 4</option><option value="blockquote">引用</option></select>
+          <select id="lineHeight" title="行距"><option value="1">单倍</option><option value="1.25">1.25 倍</option><option value="1.5" selected>1.5 倍</option><option value="1.75">1.75 倍</option><option value="2">2 倍</option><option value="2.5">2.5 倍</option></select>
+        </div>
+        <div class="ribbon-row">
+          <button data-cmd="justifyLeft" title="左对齐">≡</button><button data-cmd="justifyCenter" title="居中">≡</button><button data-cmd="justifyRight" title="右对齐">≡</button><button data-cmd="justifyFull" title="两端对齐">☰</button>
+          <button data-cmd="insertUnorderedList">• 列表</button><button data-cmd="insertOrderedList">1. 列表</button>
+        </div>
+        <span>段落</span>
+      </div>
+      <div class="ribbon-group insert-group">
+        <div class="ribbon-row">
+          <button id="tableBtn">▦ 表格</button><button id="tocBtn">☷ 目录</button><button id="linkBtn">🔗 链接</button>
+          <label class="image-btn">图片<input id="imageFile" type="file" accept="image/*" multiple></label>
+        </div>
+        <div class="ribbon-row table-actions">
+          <button id="addRowBtn" title="在当前行后添加">＋行</button><button id="addColBtn" title="在当前列后添加">＋列</button>
+          <button id="delRowBtn">－行</button><button id="delColBtn">－列</button><button id="delTableBtn">删表</button>
+          <button id="clipboardBtn" title="检查 Word 提供给浏览器的数据">剪贴板检查</button>
+        </div>
+        <span>插入与表格</span>
+      </div>
+    </div>
+    <div id="content" class="paper prose" contenteditable="true" data-placeholder="从这里开始写作，也可以直接粘贴普通图文……"></div>
+    <div class="editor-foot"><span id="words">0 字</span><span class="hint">标题将自动出现在左侧导航窗格</span><button class="danger" id="deleteBtn">删除文章</button></div>
+  </main>
+</div>
+<script src="editor.js?v=20260723-1"></script>
+</body></html>
