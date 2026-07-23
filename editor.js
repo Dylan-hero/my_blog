@@ -7,10 +7,17 @@ const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),sta
 if(!data.length)create();
 
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?x:[]}catch{return[]}}
-function savedLabel(){const n=data.find(x=>x.id===current);return n?.published?'已保存 · 已发布':'已保存'}
+function hasDraft(n){return n&&('draftTitle'in n||'draftBody'in n)}
+function editTitle(n){return hasDraft(n)?(n.draftTitle||''):(n?.title||'')}
+function editBody(n){return hasDraft(n)?(n.draftBody||''):(n?.body||'')}
+function savedLabel(){const n=data.find(x=>x.id===current);if(n?.published&&hasDraft(n))return'草稿已保存 · 线上仍为旧版本';if(n?.published)return'已保存 · 已发布';return'已存入草稿箱'}
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));dirty=false;status.textContent=savedLabel()}catch(e){status.textContent='存储空间不足';alert('文章中的图片已超过浏览器存储容量。文字不会被限制，请导出备份，并删除或压缩部分图片。')}}
-function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.updated=Date.now();persist();render();count();updateOutline()}
-function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存…':'有未保存更改';clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
+function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.updated=Date.now();persist();render();count();updateOutline();updatePublishControls()}
+function publishCurrent(){const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftTitle;delete n.draftBody;dirty=false;persist();render();show();alert('已发布。当前设备首页会立即显示这个版本；接入云数据库后，其他电脑也能看到。')}
+function unpublishCurrent(){const n=data.find(x=>x.id===current);if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();persist();show();render()}
+function updatePublishControls(){const n=data.find(x=>x.id===current);if(!n)return;$('#publishBtn').textContent=n.published?(dirty||hasDraft(n)?'发布更新':'重新发布'):'发布';$('#unpublishBtn').hidden=!n.published}
+function resolvePending(action){if(!dirty)return true;if(confirm('当前内容还没有保存。是否先存入草稿箱，再'+action+'？')){save();return true}return confirm('不保存这些修改，直接'+action+'？')}
+function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存草稿…':'有未保存的草稿';updatePublishControls();clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
 function state(){return{title:title.value,body:content.innerHTML}}
 function recordHistory(){const s=state(),last=history[historyIndex];if(last&&last.title===s.title&&last.body===s.body)return;history=history.slice(0,historyIndex+1);history.push(s);if(history.length>100)history.shift();historyIndex=history.length-1}
 function resetHistory(){history=[state()];historyIndex=0}
@@ -18,9 +25,9 @@ function restore(i){if(i<0||i>=history.length)return;restoring=true;historyIndex
 function undo(){clearTimeout(historyTimer);recordHistory();if(historyIndex>0)restore(historyIndex-1)}
 function redo(){if(historyIndex<history.length-1)restore(historyIndex+1)}
 
-function create(){if(current&&dirty&&!autoSave&&!confirm('当前文章有未保存更改。确定放弃更改并新建文章吗？'))return;const n={id:crypto.randomUUID?.()||Date.now().toString(),title:'',body:'',updated:Date.now(),published:false};data.unshift(n);current=n.id;persist();show();render()}
-function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=n.title||'';content.innerHTML=n.body||'';restoring=false;$('#publishBtn').textContent=n.published?'取消发布':'发布';dirty=false;status.textContent=savedLabel();window.history.replaceState(null,'','editor.html?id='+encodeURIComponent(current));count();resetHistory();updateOutline()}
-function render(filter=''){const q=filter.toLowerCase();$('#noteList').innerHTML=data.filter(n=>(n.title||'无标题文章').toLowerCase().includes(q)).sort((a,b)=>b.updated-a.updated).map(n=>`<button class="note ${n.id===current?'active':''}" data-id="${n.id}"><b>${escapeHtml(n.title||'无标题文章')}</b><span>${n.published?'● 已发布 · ':''}${new Date(n.updated).toLocaleDateString('zh-CN')}</span></button>`).join('')}
+function create(){if(current&&!resolvePending('新建文章'))return;const n={id:crypto.randomUUID?.()||Date.now().toString(),title:'',body:'',updated:Date.now(),published:false};data.unshift(n);current=n.id;persist();show();render()}
+function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=editTitle(n);content.innerHTML=editBody(n);restoring=false;dirty=false;status.textContent=savedLabel();updatePublishControls();window.history.replaceState(null,'','editor.html?id='+encodeURIComponent(current));count();resetHistory();updateOutline()}
+function render(filter=''){const q=filter.toLowerCase();$('#noteList').innerHTML=data.filter(n=>(editTitle(n)||'无标题文章').toLowerCase().includes(q)).sort((a,b)=>b.updated-a.updated).map(n=>`<button class="note ${n.id===current?'active':''}" data-id="${n.id}"><b>${escapeHtml(editTitle(n)||'无标题文章')}</b><span>${n.published?(hasDraft(n)?'● 已发布 · 有草稿 · ':'● 已发布 · '):'○ 草稿 · '}${new Date(n.updated).toLocaleDateString('zh-CN')}</span></button>`).join('')}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function count(){const t=content.innerText.trim();$('#words').textContent=(t?t.replace(/\s/g,'').length:0)+' 字'}
 
@@ -142,14 +149,16 @@ content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a
 autoSaveToggle.checked=autoSave;
 autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
 $('#saveBtn').onclick=()=>{clearTimeout(saveTimer);save()};
+$('#draftBtn').onclick=()=>{clearTimeout(saveTimer);save();alert('已经存入草稿箱，不会改变当前已发布版本。')};
 $('#newBtn').onclick=create;
-$('#noteList').onclick=e=>{const b=e.target.closest('.note');if(!b||b.dataset.id===current)return;if(dirty&&!autoSave&&!confirm('当前文章尚未保存。确定放弃更改并切换文章吗？'))return;if(autoSave&&dirty)save();current=b.dataset.id;show();render()};
+$('#noteList').onclick=e=>{const b=e.target.closest('.note');if(!b||b.dataset.id===current)return;if(!resolvePending('切换文章'))return;current=b.dataset.id;show();render()};
 $('#search').oninput=e=>render(e.target.value);
 document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{const cmd=b.dataset.cmd;if(cmd==='undo')return undo();if(cmd==='redo')return redo();applyCommand(cmd,b.dataset.value||null)});
 $('#linkBtn').onclick=()=>{const u=prompt('请输入链接地址：','https://');if(u){content.focus();document.execCommand('createLink',false,u);changed()}};
 $('#clipboardBtn').onclick=()=>{diagnosticMode=true;content.focus();alert('现在请回到正文区域，按 Ctrl+V 粘贴刚才从 Word 复制的内容。粘贴后会显示检查结果。')};
 $('#imageFile').onchange=async e=>{content.focus();const range=getRange();for(const file of e.target.files)insertImage(await compressImage(file),range);e.target.value='';changed()};
-$('#publishBtn').onclick=()=>{const n=data.find(x=>x.id===current);n.published=!n.published;save();show();alert(n.published?'已发布：现在可在本机浏览器的首页看到。':'已取消发布')};
+$('#publishBtn').onclick=publishCurrent;
+$('#unpublishBtn').onclick=unpublishCurrent;
 $('#deleteBtn').onclick=()=>{if(!confirm('确定删除这篇文章吗？此操作不能撤销。'))return;data=data.filter(x=>x.id!==current);current=data[0]?.id||null;persist();current?show():create();render()};
 $('#exportBtn').onclick=()=>{save();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='我的笔记备份-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href)};
 $('#importFile').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!Array.isArray(x))throw 0;if(confirm('导入会替换当前浏览器里的文章，确定继续吗？')){data=x;current=data[0]?.id||null;persist();current?show():create();render()}}catch{alert('备份文件格式不正确')}e.target.value=''};
