@@ -1,12 +1,16 @@
-const KEY='my_blog_notes_v1';
-let data=load(),current=data[0]?.id||null,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false,savedRange=null;
-const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),status=$('#status');
+const KEY='my_blog_notes_v1',AUTO_KEY='my_blog_autosave_v1';
+let data=load();
+const requestedId=new URLSearchParams(location.search).get('id');
+let current=data.some(n=>n.id===requestedId)?requestedId:(data[0]?.id||null);
+let autoSave=localStorage.getItem(AUTO_KEY)!=='false',dirty=false,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false,savedRange=null;
+const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),status=$('#status'),autoSaveToggle=$('#autoSaveToggle');
 if(!data.length)create();
 
 function load(){try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?x:[]}catch{return[]}}
-function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));status.textContent='已保存'}catch(e){status.textContent='存储空间不足';alert('文章中的图片已超过浏览器存储容量。文字不会被限制，请导出备份，并删除或压缩部分图片。')}}
+function savedLabel(){const n=data.find(x=>x.id===current);return n?.published?'已保存 · 已发布':'已保存'}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(data));dirty=false;status.textContent=savedLabel()}catch(e){status.textContent='存储空间不足';alert('文章中的图片已超过浏览器存储容量。文字不会被限制，请导出备份，并删除或压缩部分图片。')}}
 function save(){if(!current)return;const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.updated=Date.now();persist();render();count();updateOutline()}
-function changed(){if(restoring)return;status.textContent='正在保存…';clearTimeout(saveTimer);saveTimer=setTimeout(save,600);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
+function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存…':'有未保存更改';clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
 function state(){return{title:title.value,body:content.innerHTML}}
 function recordHistory(){const s=state(),last=history[historyIndex];if(last&&last.title===s.title&&last.body===s.body)return;history=history.slice(0,historyIndex+1);history.push(s);if(history.length>100)history.shift();historyIndex=history.length-1}
 function resetHistory(){history=[state()];historyIndex=0}
@@ -14,14 +18,14 @@ function restore(i){if(i<0||i>=history.length)return;restoring=true;historyIndex
 function undo(){clearTimeout(historyTimer);recordHistory();if(historyIndex>0)restore(historyIndex-1)}
 function redo(){if(historyIndex<history.length-1)restore(historyIndex+1)}
 
-function create(){const n={id:crypto.randomUUID?.()||Date.now().toString(),title:'',body:'',updated:Date.now(),published:false};data.unshift(n);current=n.id;persist();show();render()}
-function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=n.title||'';content.innerHTML=n.body||'';restoring=false;$('#publishBtn').textContent=n.published?'取消发布':'发布';count();resetHistory();updateOutline()}
+function create(){if(current&&dirty&&!autoSave&&!confirm('当前文章有未保存更改。确定放弃更改并新建文章吗？'))return;const n={id:crypto.randomUUID?.()||Date.now().toString(),title:'',body:'',updated:Date.now(),published:false};data.unshift(n);current=n.id;persist();show();render()}
+function show(){const n=data.find(x=>x.id===current);if(!n)return;restoring=true;title.value=n.title||'';content.innerHTML=n.body||'';restoring=false;$('#publishBtn').textContent=n.published?'取消发布':'发布';dirty=false;status.textContent=savedLabel();history.replaceState(null,'','editor.html?id='+encodeURIComponent(current));count();resetHistory();updateOutline()}
 function render(filter=''){const q=filter.toLowerCase();$('#noteList').innerHTML=data.filter(n=>(n.title||'无标题文章').toLowerCase().includes(q)).sort((a,b)=>b.updated-a.updated).map(n=>`<button class="note ${n.id===current?'active':''}" data-id="${n.id}"><b>${escapeHtml(n.title||'无标题文章')}</b><span>${n.published?'● 已发布 · ':''}${new Date(n.updated).toLocaleDateString('zh-CN')}</span></button>`).join('')}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function count(){const t=content.innerText.trim();$('#words').textContent=(t?t.replace(/\s/g,'').length:0)+' 字'}
 
 title.addEventListener('input',changed);content.addEventListener('input',changed);
-document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();if(k==='z'){e.preventDefault();e.shiftKey?redo():undo()}else if(k==='y'){e.preventDefault();redo()}});
+document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();if(k==='s'){e.preventDefault();clearTimeout(saveTimer);save()}else if(k==='z'){e.preventDefault();e.shiftKey?redo():undo()}else if(k==='y'){e.preventDefault();redo()}});
 content.addEventListener('paste',async e=>{
  const cb=e.clipboardData;
  const types=[...cb.types],html=cb.getData('text/html')||'',plain=cb.getData('text/plain')||'',rtf=cb.getData('text/rtf')||'';
@@ -135,8 +139,11 @@ $('#tableBtn').onclick=()=>{const rv=prompt('表格行数（1～30）：','4');i
 $('#tocBtn').onclick=insertOrUpdateTOC;
 $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>tableAction('addCol');$('#delRowBtn').onclick=()=>tableAction('delRow');$('#delColBtn').onclick=()=>tableAction('delCol');$('#delTableBtn').onclick=()=>tableAction('delTable');
 content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
+autoSaveToggle.checked=autoSave;
+autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
+$('#saveBtn').onclick=()=>{clearTimeout(saveTimer);save()};
 $('#newBtn').onclick=create;
-$('#noteList').onclick=e=>{const b=e.target.closest('.note');if(b){save();current=b.dataset.id;show();render()}};
+$('#noteList').onclick=e=>{const b=e.target.closest('.note');if(!b||b.dataset.id===current)return;if(dirty&&!autoSave&&!confirm('当前文章尚未保存。确定放弃更改并切换文章吗？'))return;if(autoSave&&dirty)save();current=b.dataset.id;show();render()};
 $('#search').oninput=e=>render(e.target.value);
 document.querySelectorAll('[data-cmd]').forEach(b=>b.onclick=()=>{const cmd=b.dataset.cmd;if(cmd==='undo')return undo();if(cmd==='redo')return redo();applyCommand(cmd,b.dataset.value||null)});
 $('#linkBtn').onclick=()=>{const u=prompt('请输入链接地址：','https://');if(u){content.focus();document.execCommand('createLink',false,u);changed()}};
@@ -146,4 +153,4 @@ $('#publishBtn').onclick=()=>{const n=data.find(x=>x.id===current);n.published=!
 $('#deleteBtn').onclick=()=>{if(!confirm('确定删除这篇文章吗？此操作不能撤销。'))return;data=data.filter(x=>x.id!==current);current=data[0]?.id||null;persist();current?show():create();render()};
 $('#exportBtn').onclick=()=>{save();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='我的笔记备份-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href)};
 $('#importFile').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!Array.isArray(x))throw 0;if(confirm('导入会替换当前浏览器里的文章，确定继续吗？')){data=x;current=data[0]?.id||null;persist();current?show():create();render()}}catch{alert('备份文件格式不正确')}e.target.value=''};
-window.addEventListener('beforeunload',save);show();render();
+window.addEventListener('beforeunload',e=>{if(autoSave&&dirty)save();else if(dirty){e.preventDefault();e.returnValue=''}});show();render();
