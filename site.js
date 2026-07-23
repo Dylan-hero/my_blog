@@ -4,9 +4,9 @@ const samples=[
  {id:'sample2',title:'从记录开始',body:'<p>不必等到想法完整才落笔。先写下一句话，知识会在反复整理中慢慢形成。</p>',updated:Date.now()-86400000,published:true}
 ];
 function storedNotes(){try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:[]}catch{return[]}}
-function hasDraft(n){return n&&('draftTitle'in n||'draftBody'in n)}
-function draftTitle(n){return hasDraft(n)?(n.draftTitle||''):(n.title||'')}
-function draftBody(n){return hasDraft(n)?(n.draftBody||''):(n.body||'')}
+function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
+function draftTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n.title||'')}
+function draftBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n.body||'')}
 const stored=storedNotes(),usingSamples=!stored.length;
 const published=(usingSamples?samples:stored.filter(n=>n.published)).sort((a,b)=>b.updated-a.updated);
 const drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
