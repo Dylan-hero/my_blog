@@ -7,12 +7,14 @@ function storedNotes(){try{const n=JSON.parse(localStorage.getItem(KEY));return 
 function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
 function draftTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n.title||'')}
 function draftBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n.body||'')}
-const stored=storedNotes(),usingSamples=!stored.length;
-const published=(usingSamples?samples:stored.filter(n=>n.published)).sort((a,b)=>b.updated-a.updated);
-const drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
 const box=document.querySelector('#posts'),dlg=document.querySelector('#reader');
-let view='published';
-publishedCount.textContent=published.length;draftCount.textContent=drafts.length;
+let view='published',stored=[],usingSamples=true,published=[],drafts=[];
+function reloadData(){
+ stored=storedNotes();usingSamples=!stored.length;
+ published=(usingSamples?samples:stored.filter(n=>n.published)).sort((a,b)=>b.updated-a.updated);
+ drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
+ publishedCount.textContent=published.length;draftCount.textContent=drafts.length;render();
+}
 function render(){
  const list=view==='published'?published:drafts;
  sectionTitle.textContent=view==='published'?'已发布文章':'草稿箱';
@@ -27,4 +29,7 @@ document.querySelectorAll('.library-tab').forEach(b=>b.onclick=()=>{view=b.datas
 box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>x.id===c.dataset.id);if(!p)return;if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}readTitle.textContent=p.title||'无标题文章';readDate.textContent=new Date(p.updated).toLocaleDateString('zh-CN');readBody.innerHTML=p.body||'';editPost.hidden=usingSamples;editPost.href='editor.html?id='+encodeURIComponent(p.id);dlg.showModal()};
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return(d.textContent||'').trim()}
-document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};render();
+document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
+window.addEventListener('pageshow',reloadData);window.addEventListener('focus',reloadData);
+window.addEventListener('storage',e=>{if(e.key===KEY)reloadData()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadData()});reloadData();
