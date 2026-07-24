@@ -16,8 +16,10 @@ let view='published',stored=[],usingSamples=true,published=[],drafts=[];
 function reloadData(){
  stored=storedNotes();usingSamples=!window.__PRIVATE_MODE__&&!stored.length;
  const source=usingSamples?samples:stored.filter(n=>n.published);
- const sourceIds=new Set(source.map(n=>String(n.id))),sourceTitles=new Set(source.map(n=>normalizeTitle(n.title)));
- const fallbacks=staticPosts.filter(s=>!sourceIds.has(String(s.id))&&!sourceTitles.has(normalizeTitle(s.title)));
+ // 已取消发布的云端文章仍然是“已知文章”，不能再被旧静态备用文章补回首页。
+ const known=usingSamples?source:stored;
+ const knownIds=new Set(known.map(n=>String(n.id))),knownTitles=new Set(known.map(n=>normalizeTitle(n.title)));
+ const fallbacks=staticPosts.filter(s=>!knownIds.has(String(s.id))&&!knownTitles.has(normalizeTitle(s.title)));
  published=[...source,...fallbacks].sort((a,b)=>b.updated-a.updated);
  drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
  publishedCount.textContent=published.length;draftCount.textContent=drafts.length;render();
