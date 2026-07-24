@@ -224,7 +224,8 @@ function tableCellMap(table){
 function logicalColumnIndex(cell,grid=null){return(grid||tableCellMap(cell.closest('table'))).map.get(cell)?.colStart||0}
 function tableColumnCount(table){return tableCellMap(table).columns}
 function ensureColgroup(table){
- let group=table.querySelector(':scope > colgroup');
+ const groups=[...table.children].filter(child=>child.tagName==='COLGROUP');let group=groups[0];
+ groups.slice(1).forEach(extra=>extra.remove());
  if(!group){group=document.createElement('colgroup');group.dataset.userColumns='true';table.insertBefore(group,table.firstChild)}
  const count=tableColumnCount(table);
  while(group.children.length<count)group.appendChild(document.createElement('col'));
@@ -286,7 +287,8 @@ function syncTableContextToolbar(cell){
  const ratio=parseFloat(style.lineHeight)/Math.max(1,parseFloat(style.fontSize)),lineOptions=[1,1.15,1.5,1.75,2];$('#ctxLineHeight').value=String(lineOptions.reduce((best,value)=>Math.abs(value-ratio)<Math.abs(best-ratio)?value:best,1.5))
 }
 function applySelectedCellStyle(property,value){
- const cells=currentTableCells();if(!cells.length)return;cells.forEach(cell=>cell.style[property]=value);changed();updateCellSelectionOverlay()
+ const cells=currentTableCells();if(!cells.length)return;cells.forEach(cell=>cell.style[property]=value);changed();
+ requestAnimationFrame(()=>{ensureTableFitsContent(cells[0].closest('table'));updateTableTools();updateCellSelectionOverlay()})
 }
 function toggleSelectedCellStyle(property,onValue,offValue){
  const cells=currentTableCells();if(!cells.length)return;const current=getComputedStyle(cells[0])[property],enabled=property==='fontWeight'?Number(current)>=600:current===onValue;
@@ -338,13 +340,16 @@ function hideTableTools(clearSelection=true){$('#tableTools').hidden=true;$('#ta
 function updateTableTools(){
  const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!cell||!table){hideTableTools();return}
  const rect=table.getBoundingClientRect(),tools=$('#tableTools');if(rect.bottom<58||rect.top>innerHeight||rect.right<0||rect.left>innerWidth){tools.hidden=true;$('#tableCellSelectionLayer').innerHTML='';return}
- tools.hidden=false;const frame=$('#tableSelectionFrame'),move=$('#tableMoveHandle'),addCol=$('#quickAddCol'),addRow=$('#quickAddRow');
+ tools.hidden=false;const frame=$('#tableSelectionFrame'),move=$('#tableMoveHandle'),addCol=$('#quickAddCol'),addRow=$('#quickAddRow'),west=$('.table-edge-handle.edge-w'),east=$('.table-edge-handle.edge-e'),north=$('.table-edge-handle.edge-n'),south=$('.table-edge-handle.edge-s');
+ const middleX=Math.max(25,Math.min(innerWidth-25,rect.left+rect.width/2)),middleY=Math.max(84,Math.min(innerHeight-48,rect.top+rect.height/2)),leftEdge=Math.max(4,Math.min(innerWidth-14,rect.left-5)),rightEdge=Math.max(4,Math.min(innerWidth-14,rect.right-5)),topEdge=Math.max(62,Math.min(innerHeight-14,rect.top-5)),bottomEdge=Math.max(62,Math.min(innerHeight-14,rect.bottom-5));
  Object.assign(frame.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
  Object.assign(move.style,{left:Math.max(4,rect.left-27)+'px',top:Math.max(62,rect.top-27)+'px'});
- Object.assign(addCol.style,{left:Math.max(4,Math.min(innerWidth-29,rect.right+6))+'px',top:Math.max(62,Math.min(innerHeight-30,rect.top+rect.height/2-13))+'px'});
- Object.assign(addRow.style,{left:Math.max(4,Math.min(innerWidth-29,rect.left+rect.width/2-13))+'px',top:Math.max(62,Math.min(innerHeight-30,rect.bottom+6))+'px'});updateCellSelectionOverlay()
+ Object.assign(west.style,{left:leftEdge+'px',top:(middleY-21)+'px'});Object.assign(east.style,{left:rightEdge+'px',top:(middleY-21)+'px'});
+ Object.assign(north.style,{left:(middleX-21)+'px',top:topEdge+'px'});Object.assign(south.style,{left:(middleX-21)+'px',top:bottomEdge+'px'});
+ Object.assign(addCol.style,{left:rightEdge+'px',top:Math.max(62,Math.min(innerHeight-30,middleY+28))+'px'});
+ Object.assign(addRow.style,{left:Math.max(4,Math.min(innerWidth-29,middleX+28))+'px',top:bottomEdge+'px'});updateCellSelectionOverlay()
 }
-function showTableTools(cell){if(!cell?.isConnected)return;activeTableCell=cell;updateTableTools()}
+function showTableTools(cell){if(!cell?.isConnected)return;activeTableCell=cell;ensureTableFitsContent(cell.closest('table'));updateTableTools()}
 function showResizeGuide(cell,mode,coordinate){
  const guide=$('#tableResizeGuide'),table=cell.closest('table'),rect=table.getBoundingClientRect(),cellRect=cell.getBoundingClientRect();guide.className='table-resize-guide '+mode;
  if(mode==='column')Object.assign(guide.style,{left:(coordinate??cellRect.right)+'px',top:rect.top+'px',width:'2px',height:rect.height+'px'});
@@ -358,12 +363,43 @@ function columnPixelWidths(table,count){
  }
  return widths.map(width=>width||fallback)
 }
+function columnMinimumWidths(table,count){
+ const minimum=Array(count).fill(58),grid=tableCellMap(table);
+ for(const cell of table.querySelectorAll('th,td')){
+   const bounds=grid.map.get(cell);if(!bounds)continue;
+   const style=getComputedStyle(cell),fontSize=parseFloat(style.fontSize)||14,padding=(parseFloat(style.paddingLeft)||0)+(parseFloat(style.paddingRight)||0)+10,text=(cell.innerText||cell.textContent||'').replace(/\s+/g,' ').trim();
+   const latin=Math.max(0,...(text.match(/[A-Za-z0-9_./:+-]+/g)||[]).map(token=>token.length)),cjk=Math.min(6,Math.max(0,...(text.match(/[\u3400-\u9fff]+/g)||[]).map(token=>token.length)));
+   const span=bounds.colEnd-bounds.colStart+1,needed=Math.min(190*span,Math.max(58*span,latin*fontSize*.62,cjk*fontSize)+padding),perColumn=needed/span;
+   for(let column=bounds.colStart;column<=bounds.colEnd;column++)minimum[column]=Math.max(minimum[column],perColumn)
+ }
+ return minimum
+}
+function rowMinimumHeights(table){
+ const rows=[...table.rows],saved=rows.map(row=>row.style.height);rows.forEach(row=>row.style.removeProperty('height'));const minimum=rows.map(()=>24);
+ for(const cell of table.querySelectorAll('th,td')){
+   const bounds=cellGridBounds(cell),span=bounds.rowEnd-bounds.rowStart+1,needed=Math.max(24,cell.scrollHeight||0)/span;
+   for(let row=bounds.rowStart;row<=Math.min(bounds.rowEnd,minimum.length-1);row++)minimum[row]=Math.max(minimum[row],needed)
+ }
+ rows.forEach((row,index)=>row.style.height=saved[index]);
+ return minimum
+}
+function fitDimensionSizes(base,minimum,target){
+ const minTotal=minimum.reduce((sum,value)=>sum+value,0),total=Math.max(target,minTotal),weights=base.map((value,index)=>Math.max(1,value-minimum[index])),weightTotal=weights.reduce((sum,value)=>sum+value,0)||base.length,extra=total-minTotal;
+ return minimum.map((value,index)=>value+extra*weights[index]/weightTotal)
+}
+function ensureTableFitsContent(table){
+ if(!table?.isConnected)return;const rect=table.getBoundingClientRect(),count=tableColumnCount(table),group=ensureColgroup(table),minimum=columnMinimumWidths(table,count),widths=fitDimensionSizes(columnPixelWidths(table,count),minimum,Math.max(rect.width,minimum.reduce((sum,value)=>sum+value,0))),total=widths.reduce((sum,value)=>sum+value,0);
+ widths.forEach((width,index)=>{if(group.children[index])group.children[index].style.width=width+'px'});
+ table.style.width=total+'px';table.style.minWidth='0';table.style.maxWidth='none';table.style.tableLayout='fixed';
+ const rowMinimum=rowMinimumHeights(table);[...table.rows].forEach((row,index)=>row.style.height=Math.max(row.getBoundingClientRect().height,rowMinimum[index])+'px')
+}
 function beginTableScale(event){
  const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!cell||!table)return;
  event.preventDefault();event.stopPropagation();hideTableContextMenu();
- const rect=table.getBoundingClientRect(),count=tableColumnCount(table),group=ensureColgroup(table),columnWidths=columnPixelWidths(table,count),rowHeights=[...table.rows].map(row=>row.getBoundingClientRect().height);
+ const rect=table.getBoundingClientRect(),count=tableColumnCount(table),group=ensureColgroup(table),minimumColumns=columnMinimumWidths(table,count),columnWidths=fitDimensionSizes(columnPixelWidths(table,count),minimumColumns,rect.width),rowMinimum=rowMinimumHeights(table),rowHeights=fitDimensionSizes([...table.rows].map(row=>row.getBoundingClientRect().height),rowMinimum,rect.height);
  columnWidths.forEach((width,index)=>{if(group.children[index])group.children[index].style.width=width+'px'});
- tableScale={corner:event.currentTarget.dataset.corner,startX:event.clientX,startY:event.clientY,startWidth:rect.width,startHeight:rect.height,table,group,columnWidths,rowHeights}
+ const startWidth=columnWidths.reduce((sum,value)=>sum+value,0),startHeight=rowHeights.reduce((sum,value)=>sum+value,0);table.style.width=startWidth+'px';table.style.minWidth='0';table.style.maxWidth='none';table.style.tableLayout='fixed';
+ tableScale={corner:event.currentTarget.dataset.corner,startX:event.clientX,startY:event.clientY,startWidth,startHeight,table,group,columnWidths,rowHeights,minimumColumns,rowMinimum}
 }
 function closeTableDialog(){const dialog=$('#tableDialog');if(typeof dialog.close==='function')dialog.close();else dialog.removeAttribute('open')}
 function openTableDialog(){
@@ -408,12 +444,12 @@ function applyTableProperties(){
    target.style.padding=paddingTop+'px '+paddingRight+'px '+paddingBottom+'px '+paddingLeft+'px';target.style.lineHeight=lineHeight;target.style.borderStyle='solid';target.style.borderWidth=borderWidth+'px';target.style.borderColor=borderColor;
    target.style.backgroundColor=fillColor;target.style.textAlign=$('#tableTextAlign').value;target.style.verticalAlign=$('#tableVerticalAlign').value
  });
- closeTableDialog();changed();requestAnimationFrame(updateTableTools)
+ closeTableDialog();changed();requestAnimationFrame(()=>{ensureTableFitsContent(table);updateTableTools()})
 }
 function resetTableSizing(){
  const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!table){closeTableDialog();return}
  ['width','min-width','max-width','table-layout'].forEach(property=>table.style.removeProperty(property));
- table.querySelectorAll(':scope > colgroup > col').forEach(col=>col.style.removeProperty('width'));
+ [...table.children].filter(child=>child.tagName==='COLGROUP').flatMap(group=>[...group.children]).forEach(col=>col.style.removeProperty('width'));
  [...table.rows].forEach(row=>row.style.removeProperty('height'));
  table.querySelectorAll('th,td').forEach(item=>{item.style.removeProperty('width');item.style.removeProperty('height')});
  closeTableDialog();changed();requestAnimationFrame(updateTableTools)
@@ -434,8 +470,8 @@ content.addEventListener('pointerdown',event=>{
  if(mode){
    event.preventDefault();const table=cell.closest('table'),rect=cell.getBoundingClientRect();
    if(mode==='column'){
-     const group=ensureColgroup(table),column=logicalColumnIndex(cell),col=group.children[column],startSize=rect.width/Math.max(1,cell.colSpan||1);
-     tableResize={mode,start:event.clientX,startSize,startTableWidth:table.getBoundingClientRect().width,table,col}
+     const group=ensureColgroup(table),column=logicalColumnIndex(cell),col=group.children[column],startSize=rect.width/Math.max(1,cell.colSpan||1),minSize=columnMinimumWidths(table,tableColumnCount(table))[column]||58;
+     tableResize={mode,start:event.clientX,startSize,startTableWidth:table.getBoundingClientRect().width,table,col,minSize}
    }else tableResize={mode,start:event.clientY,startSize:cell.parentElement.getBoundingClientRect().height,row:cell.parentElement}
    return
  }
@@ -443,16 +479,17 @@ content.addEventListener('pointerdown',event=>{
 });
 document.addEventListener('pointermove',event=>{
  if(tableScale){
-   event.preventDefault();const horizontal=(tableScale.corner.includes('e')?event.clientX-tableScale.startX:tableScale.startX-event.clientX),vertical=(tableScale.corner.includes('s')?event.clientY-tableScale.startY:tableScale.startY-event.clientY);
-   const width=Math.max(160,tableScale.startWidth+horizontal),height=Math.max(tableScale.rowHeights.length*24,tableScale.startHeight+vertical),scaleX=width/tableScale.startWidth,scaleY=height/tableScale.startHeight;
+   event.preventDefault();const horizontalEnabled=/[ew]/.test(tableScale.corner),verticalEnabled=/[ns]/.test(tableScale.corner);
+   const horizontal=!horizontalEnabled?0:(tableScale.corner.includes('e')?event.clientX-tableScale.startX:tableScale.startX-event.clientX),vertical=!verticalEnabled?0:(tableScale.corner.includes('s')?event.clientY-tableScale.startY:tableScale.startY-event.clientY);
+   const columnWidths=fitDimensionSizes(tableScale.columnWidths,tableScale.minimumColumns,tableScale.startWidth+horizontal),rowHeights=fitDimensionSizes(tableScale.rowHeights,tableScale.rowMinimum,tableScale.startHeight+vertical),width=columnWidths.reduce((sum,value)=>sum+value,0);
    tableScale.table.style.width=width+'px';tableScale.table.style.minWidth='0';tableScale.table.style.maxWidth='none';tableScale.table.style.tableLayout='fixed';
-   tableScale.columnWidths.forEach((value,index)=>{if(tableScale.group.children[index])tableScale.group.children[index].style.width=Math.max(32,value*scaleX)+'px'});
-   [...tableScale.table.rows].forEach((row,index)=>row.style.height=Math.max(24,(tableScale.rowHeights[index]||24)*scaleY)+'px');updateTableTools();return
+   columnWidths.forEach((value,index)=>{if(tableScale.group.children[index])tableScale.group.children[index].style.width=value+'px'});
+   [...tableScale.table.rows].forEach((row,index)=>row.style.height=rowHeights[index]+'px');updateTableTools();return
  }
  if(tableResize){
   if(tableResize.mode==='column'){
-   const size=Math.max(40,Math.min(800,tableResize.startSize+event.clientX-tableResize.start)),delta=size-tableResize.startSize;
-   tableResize.col.style.width=size+'px';tableResize.table.style.tableLayout='fixed';tableResize.table.style.width=Math.max(120,tableResize.startTableWidth+delta)+'px';tableResize.table.style.maxWidth='none';showResizeGuide(activeTableCell,'column',event.clientX)
+   const size=Math.max(tableResize.minSize||58,Math.min(800,tableResize.startSize+event.clientX-tableResize.start)),delta=size-tableResize.startSize;
+   tableResize.col.style.width=size+'px';tableResize.table.style.tableLayout='fixed';tableResize.table.style.width=Math.max(120,tableResize.startTableWidth+delta)+'px';tableResize.table.style.minWidth='0';tableResize.table.style.maxWidth='none';showResizeGuide(activeTableCell,'column',event.clientX)
   }else{tableResize.row.style.height=Math.max(24,Math.min(500,tableResize.startSize+event.clientY-tableResize.start))+'px';showResizeGuide(activeTableCell,'row',event.clientY)}
   return
  }
@@ -495,7 +532,7 @@ $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>ta
 $('#tablePropsBtn').onclick=openTableDialog;$('#tableDialogClose').onclick=closeTableDialog;$('#tableApplyBtn').onclick=applyTableProperties;$('#tableResetBtn').onclick=resetTableSizing;
 $('#quickAddCol').onclick=()=>{selectCell(activeTableCell);tableAction('addCol')};$('#quickAddRow').onclick=()=>{selectCell(activeTableCell);tableAction('addRow')};
 $('#tableMoveHandle').onclick=()=>{selectWholeTable();$('#tableScope').value='table'};$('#tableMoveHandle').ondblclick=openTableDialog;
-document.querySelectorAll('.table-scale-handle').forEach(handle=>handle.onpointerdown=beginTableScale);
+document.querySelectorAll('.table-scale-handle,.table-edge-handle').forEach(handle=>handle.onpointerdown=beginTableScale);
 content.addEventListener('click',e=>{
  if(suppressTableClick){suppressTableClick=false;e.preventDefault();return}
  const cell=e.target.closest('td,th');if(cell){clearCellSelection();showTableTools(cell)}else if(!e.target.closest('table'))hideTableTools();
