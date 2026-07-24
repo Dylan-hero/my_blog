@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps3">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps4">
 </head>
-<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps3">
+<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps4">
 <section id="authGate" class="auth-gate" hidden>
   <div class="auth-card"><span class="auth-mark">私人写作台</span><h1>我的笔记</h1><p id="authMessage">使用你的GitHub账号登录后，才能编辑和同步文章。</p><button id="githubLogin" class="github-login">使用 GitHub 登录</button><small>只有账号 Dylan-hero 可以进入</small></div>
 </section><div id="appShell" hidden>
@@ -106,6 +106,10 @@
     <button class="table-scale-handle corner-se" data-corner="se" type="button" title="拖动缩放整张表格"></button>
   </div>
   <button id="tableMoveHandle" class="table-move-handle" type="button" title="选择整张表格；双击打开表格属性">⠿</button>
+  <button class="table-edge-handle edge-w" data-corner="w" type="button" title="左右拖动调整表格宽度"></button>
+  <button class="table-edge-handle edge-e" data-corner="e" type="button" title="左右拖动调整表格宽度"></button>
+  <button class="table-edge-handle edge-n" data-corner="n" type="button" title="上下拖动调整表格高度"></button>
+  <button class="table-edge-handle edge-s" data-corner="s" type="button" title="上下拖动调整表格高度"></button>
   <button id="quickAddCol" class="table-quick-add table-quick-add-col" type="button" title="在右侧添加一列">＋</button>
   <button id="quickAddRow" class="table-quick-add table-quick-add-row" type="button" title="在下方添加一行">＋</button>
   <div id="tableCellSelectionLayer" class="table-cell-selection-layer"></div>
