@@ -24,7 +24,16 @@ function queueCloudSync(n){
 function persist(){try{const raw=JSON.stringify(data);localStorage.setItem(KEY,raw);if(!localStorage.getItem(KEY))throw new Error('verify failed');dirty=false;status.textContent=savedLabel();const n=data.find(x=>String(x.id)===String(current));if(n&&window.blogCloud?.session)queueCloudSync(n);else lastCloudSync=Promise.resolve(true);return true}catch(e){status.textContent='草稿保存失败 · 存储空间不足';alert('草稿没有写入成功。当前文章中的图片可能超过浏览器本地存储容量，请先导出备份或删除部分大图。');return false}}
 function save(forceDraft=false){if(!current)return false;const n=data.find(x=>x.id===current);if(!n)return false;const same=n.published&&n.title===title.value&&n.body===content.innerHTML;if(same&&!forceDraft){delete n.draftSaved;delete n.draftTitle;delete n.draftBody}else{n.draftSaved=true;if(same){delete n.draftTitle;delete n.draftBody}else{n.draftTitle=title.value;n.draftBody=content.innerHTML}}n.updated=Date.now();const ok=persist();render();count();updateOutline();updatePublishControls();return ok}
 async function publishCurrent(){const n=data.find(x=>String(x.id)===String(current));if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftSaved;delete n.draftTitle;delete n.draftBody;dirty=false;if(!persist())return;render();show();const ok=await lastCloudSync;alert(ok?'已发布并同步到私人云端。其他电脑使用同一GitHub账号登录后即可看到。':'文章已保存在当前电脑，但云端同步失败，请不要关闭页面，稍后再次点击发布。')}
-async function unpublishCurrent(){const n=data.find(x=>String(x.id)===String(current));if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftSaved=true;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();if(!persist())return;show();render();const ok=await lastCloudSync;if(!ok)alert('当前电脑已取消发布，但云端同步失败，请稍后再试。')}
+async function unpublishCurrent(){
+ const n=data.find(x=>String(x.id)===String(current));
+ if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;
+ const button=$('#unpublishBtn');button.disabled=true;
+ n.draftSaved=true;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();
+ if(!persist()){button.disabled=false;return}
+ show();render();
+ const ok=await lastCloudSync;button.disabled=false;
+ alert(ok?'已取消发布并同步到云端草稿箱。返回主页后，已发布数量会立即减少。':'当前电脑已取消发布，但云端同步失败，请稍后再试。')
+}
 function updatePublishControls(){const n=data.find(x=>x.id===current);if(!n)return;$('#publishBtn').textContent=n.published?(dirty||hasDraft(n)?'发布更新':'重新发布'):'发布';$('#unpublishBtn').hidden=!n.published}
 function resolvePending(action){if(!dirty)return true;if(confirm('当前内容还没有保存。是否先存入草稿箱，再'+action+'？')){save();return true}return confirm('不保存这些修改，直接'+action+'？')}
 function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存草稿…':'有未保存的草稿';updatePublishControls();clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
@@ -51,14 +60,17 @@ content.addEventListener('paste',async e=>{
  const isWord=/mso-|urn:schemas-microsoft-com|Microsoft Word|WordDocument/i.test(html);
  e.preventDefault();
  let broken=0,mode='';
- if(rtf&&!html){
+ if(html){
+   // Word 同时提供 HTML 和纯文字时必须优先 HTML，否则表格、颜色和标题级别都会被主动丢弃。
+   const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html);mode=isWord?'Word HTML富文本模式':'HTML格式模式';
+   if(rtf&&broken){
+     const parsed=parseRtf(rtf),range=getRange();
+     for(const src of parsed.images.slice(0,broken))insertImage(src,range)
+   }
+ }else if(rtf){
    const parsed=parseRtf(rtf),best=parsed.text.length>plain.length?parsed.text:plain;
    insertPlainWithLines(best);mode='RTF兼容模式';
    if(parsed.images.length){const range=getRange();for(const src of parsed.images)insertImage(src,range)}
- }else if(isWord&&plain){
-   insertPlainWithLines(plain);mode='Word纯文字完整模式';
- }else if(html){
-   const cleaned=sanitizeWordHtml(html);broken=cleaned.broken;insertHtml(cleaned.html);mode='HTML格式模式';
  }else if(plain){
    if(looksLikeTable(plain)){insertTableFromTSV(plain);mode='制表符表格模式'}
    else{insertPlainWithLines(plain);mode='纯文字模式'}
@@ -115,7 +127,32 @@ function parseRtf(rtf){
  }
  return{text:out.replace(/\n{3,}/g,'\n\n').trim(),images};
 }
-function sanitizeWordHtml(raw){const doc=new DOMParser().parseFromString(raw,'text/html');doc.querySelectorAll('script,style,meta,link,object,iframe').forEach(x=>x.remove());let broken=0;doc.querySelectorAll('*').forEach(el=>{[...el.attributes].forEach(a=>{if(a.name.startsWith('on')||['class','id','lang'].includes(a.name))el.removeAttribute(a.name)});if(el.tagName==='IMG'){const src=el.getAttribute('src')||'';if(!src||/^(file:|blob:|cid:)/i.test(src)){broken++;el.remove()}}});return{html:doc.body.innerHTML,broken}}
+function sanitizeWordHtml(raw){
+ const doc=new DOMParser().parseFromString(raw,'text/html');
+ doc.querySelectorAll('script,style,meta,link,object,iframe').forEach(x=>x.remove());
+ // Word 的“标题 1～4”通常是带 MsoHeading 类的段落；转成语义标题后才能生成导航。
+ doc.querySelectorAll('p,div').forEach(el=>{
+   const cls=el.getAttribute('class')||'',style=el.getAttribute('style')||'';
+   const match=cls.match(/(?:Mso)?Heading\s*([1-4])/i)||style.match(/mso-outline-level\s*:\s*([1-4])/i);
+   if(!match)return;
+   const heading=doc.createElement('h'+Math.min(4,Math.max(1,Number(match[1]))));
+   [...el.attributes].forEach(a=>heading.setAttribute(a.name,a.value));
+   while(el.firstChild)heading.appendChild(el.firstChild);
+   el.replaceWith(heading)
+ });
+ let broken=0;
+ doc.querySelectorAll('*').forEach(el=>{
+   [...el.attributes].forEach(a=>{
+     if(a.name.startsWith('on')||['class','id','lang'].includes(a.name))el.removeAttribute(a.name);
+     if(a.name==='style'&&/(?:expression\s*\(|javascript:|vbscript:|url\s*\()/i.test(a.value))el.removeAttribute(a.name)
+   });
+   if(el.tagName==='IMG'){
+     const src=el.getAttribute('src')||'';
+     if(!src||/^(file:|blob:|cid:)/i.test(src)){broken++;el.remove()}
+   }
+ });
+ return{html:doc.body.innerHTML,broken}
+}
 function insertHtml(html){restoreSelection();document.execCommand('insertHTML',false,html);rememberRange()}
 function insertText(text){restoreSelection();document.execCommand('insertText',false,text);rememberRange()}
 function getRange(){const s=getSelection();if(s.rangeCount&&content.contains(s.anchorNode))return s.getRangeAt(0);if(savedRange)return savedRange.cloneRange();const r=document.createRange();r.selectNodeContents(content);r.collapse(false);return r}
