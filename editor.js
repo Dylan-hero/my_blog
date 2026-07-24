@@ -178,18 +178,34 @@ async function importLegacyIfNeeded(){
  const existing=data.find(n=>String(n.id)===requestedId||normalizeTitle(n.title)==='mdb协议学习记录');
  if(existing){current=String(existing.id);return}
  status.textContent='正在把旧文章导入私人云端…';
- const response=await fetch('articles/mdb-protocol-study.html',{cache:'no-store'});
+ const response=await fetch('legacy/mdb-protocol-study-source.html',{cache:'no-store'});
  if(!response.ok)throw new Error('无法读取旧文章');
  const doc=new DOMParser().parseFromString(await response.text(),'text/html'),bodyNode=doc.querySelector('.study-content');
  if(!bodyNode)throw new Error('旧文章正文格式无法识别');
- const n={id:'mdb-protocol-study',title:doc.querySelector('h1')?.textContent?.trim()||'MDB 协议学习记录',body:bodyNode.innerHTML,published:true,updated:Date.UTC(2026,6,23),createdAt:Date.UTC(2026,6,23),publishedAt:Date.UTC(2026,6,23)};
+ const fixed=window.blogStructure?.structureHtml(bodyNode.innerHTML,'mdb-protocol-study')||{html:bodyNode.innerHTML};
+ const n={id:'mdb-protocol-study',title:doc.querySelector('h1')?.textContent?.trim()||'MDB 协议学习记录',body:fixed.html,published:true,updated:Date.UTC(2026,6,23),createdAt:Date.UTC(2026,6,23),publishedAt:Date.UTC(2026,6,23)};
  data.unshift(n);current=n.id;
  if(!persist())throw new Error('本地保存失败');
  if(!await lastCloudSync)throw new Error('Supabase 云端同步失败');
  alert('旧版 MDB 文章已转为云端文章。以后它和其他文章一样可以重新编辑、保存草稿和发布更新。')
 }
+async function repairLegacyStructureIfNeeded(){
+ const n=data.find(x=>String(x.id)===String(current));
+ if(!n||!window.blogStructure||(String(n.id)!=='mdb-protocol-study'&&normalizeTitle(n.title)!=='mdb协议学习记录'))return;
+ let changed=false,tables=0,headings=0;
+ for(const field of ['body','draftBody']){
+  if(typeof n[field]!=='string')continue;
+  const result=window.blogStructure.structureHtml(n[field],'mdb-protocol-study');
+  if(result.changed){n[field]=result.html;changed=true;tables=Math.max(tables,result.tables);headings=Math.max(headings,result.headings)}
+ }
+ if(!changed)return;
+ n.updated=Date.now();
+ if(!persist())throw new Error('结构恢复后的文章无法保存到当前浏览器');
+ if(!await lastCloudSync)throw new Error('结构恢复后的文章无法同步到 Supabase');
+ alert('MDB 文章结构已修复并同步云端：恢复 '+tables+' 个表格、'+headings+' 个导航标题。')
+}
 async function bootstrap(){
- try{await importLegacyIfNeeded()}catch(e){console.error(e);alert('旧文章导入失败：'+e.message+'。原文章没有删除，请稍后重试。')}
+ try{await importLegacyIfNeeded();await repairLegacyStructureIfNeeded()}catch(e){console.error(e);alert('旧文章处理失败：'+e.message+'。原文章没有删除，请稍后重试。')}
  if(!data.length){create();return}
  if(requestedId&&data.some(n=>String(n.id)===String(requestedId)))current=String(requestedId);
  else if(!data.some(n=>String(n.id)===String(current)))current=String(data[0].id);
