@@ -1,20 +1,30 @@
 const KEY='my_blog_notes_v1',AUTO_KEY='my_blog_autosave_v1';
 let data=load();
-const requestedId=new URLSearchParams(location.search).get('id');
-let current=data.some(n=>n.id===requestedId)?requestedId:(data[0]?.id||null);
+const params=new URLSearchParams(location.search),requestedId=params.get('id');
+let current=data.some(n=>String(n.id)===String(requestedId))?String(requestedId):(data[0]?.id||null);
 let autoSave=localStorage.getItem(AUTO_KEY)!=='false',dirty=false,saveTimer,historyTimer,history=[],historyIndex=-1,restoring=false,diagnosticMode=false,savedRange=null;
+let cloudSyncQueue=Promise.resolve(),lastCloudSync=Promise.resolve(true),syncRevision=0;
 const $=s=>document.querySelector(s),title=$('#title'),content=$('#content'),status=$('#status'),autoSaveToggle=$('#autoSaveToggle');
-if(!data.length)create();
 
-function load(){if(Array.isArray(window.__CLOUD_NOTES__))return window.__CLOUD_NOTES__;try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?x:[]}catch{return[]}}
+function normalizeNotes(list){return list.map(n=>({...n,id:String(n.id)}))}
+function load(){if(Array.isArray(window.__CLOUD_NOTES__))return normalizeNotes(window.__CLOUD_NOTES__);try{const x=JSON.parse(localStorage.getItem(KEY));return Array.isArray(x)?normalizeNotes(x):[]}catch{return[]}}
+function normalizeTitle(s){return String(s||'').replace(/\\s+/g,'').toLowerCase()}
 function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
 function editTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n?.title||'')}
 function editBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n?.body||'')}
 function savedLabel(){const n=data.find(x=>x.id===current);if(n?.published&&hasDraft(n))return'草稿已保存 · 线上仍为旧版本';if(n?.published)return'已保存 · 已发布';return'已存入草稿箱'}
-function persist(){try{const raw=JSON.stringify(data);localStorage.setItem(KEY,raw);if(!localStorage.getItem(KEY))throw new Error('verify failed');dirty=false;status.textContent=savedLabel();const n=data.find(x=>x.id===current);if(n&&window.blogCloud?.session){status.textContent=savedLabel()+' · 正在同步云端';window.blogCloud.saveNote(n).then(()=>status.textContent=savedLabel()+' · 已同步云端').catch(e=>{status.textContent='本地已保存 · 云端同步失败';console.error(e);alert('云端同步失败：'+e.message)})}return true}catch(e){status.textContent='草稿保存失败 · 存储空间不足';alert('草稿没有写入成功。当前文章中的图片可能超过浏览器本地存储容量，请先导出备份或删除部分大图。');return false}}
+function queueCloudSync(n){
+ const snapshot=JSON.parse(JSON.stringify(n)),noteId=String(n.id),label=savedLabel(),revision=++syncRevision;
+ status.textContent=label+' · 正在同步云端';
+ const task=cloudSyncQueue.then(()=>window.blogCloud.saveNote(snapshot));
+ cloudSyncQueue=task.catch(()=>{});
+ lastCloudSync=task.then(()=>{if(revision===syncRevision&&String(current)===noteId)status.textContent=label+' · 已同步云端';return true}).catch(e=>{if(revision===syncRevision&&String(current)===noteId)status.textContent='本地已保存 · 云端同步失败';console.error(e);return false});
+ return lastCloudSync;
+}
+function persist(){try{const raw=JSON.stringify(data);localStorage.setItem(KEY,raw);if(!localStorage.getItem(KEY))throw new Error('verify failed');dirty=false;status.textContent=savedLabel();const n=data.find(x=>String(x.id)===String(current));if(n&&window.blogCloud?.session)queueCloudSync(n);else lastCloudSync=Promise.resolve(true);return true}catch(e){status.textContent='草稿保存失败 · 存储空间不足';alert('草稿没有写入成功。当前文章中的图片可能超过浏览器本地存储容量，请先导出备份或删除部分大图。');return false}}
 function save(forceDraft=false){if(!current)return false;const n=data.find(x=>x.id===current);if(!n)return false;const same=n.published&&n.title===title.value&&n.body===content.innerHTML;if(same&&!forceDraft){delete n.draftSaved;delete n.draftTitle;delete n.draftBody}else{n.draftSaved=true;if(same){delete n.draftTitle;delete n.draftBody}else{n.draftTitle=title.value;n.draftBody=content.innerHTML}}n.updated=Date.now();const ok=persist();render();count();updateOutline();updatePublishControls();return ok}
-function publishCurrent(){const n=data.find(x=>x.id===current);if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftSaved;delete n.draftTitle;delete n.draftBody;dirty=false;persist();render();show();alert('已发布并正在同步私人云端。其他电脑使用同一GitHub账号登录后即可看到。')}
-function unpublishCurrent(){const n=data.find(x=>x.id===current);if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftSaved=true;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();persist();show();render()}
+async function publishCurrent(){const n=data.find(x=>String(x.id)===String(current));if(!n)return;n.title=title.value;n.body=content.innerHTML;n.published=true;n.publishedAt=Date.now();n.updated=Date.now();delete n.draftSaved;delete n.draftTitle;delete n.draftBody;dirty=false;if(!persist())return;render();show();const ok=await lastCloudSync;alert(ok?'已发布并同步到私人云端。其他电脑使用同一GitHub账号登录后即可看到。':'文章已保存在当前电脑，但云端同步失败，请不要关闭页面，稍后再次点击发布。')}
+async function unpublishCurrent(){const n=data.find(x=>String(x.id)===String(current));if(!n||!confirm('取消发布后，文章将只保留在草稿箱，确定继续吗？'))return;n.draftSaved=true;n.draftTitle=title.value;n.draftBody=content.innerHTML;n.published=false;n.updated=Date.now();if(!persist())return;show();render();const ok=await lastCloudSync;if(!ok)alert('当前电脑已取消发布，但云端同步失败，请稍后再试。')}
 function updatePublishControls(){const n=data.find(x=>x.id===current);if(!n)return;$('#publishBtn').textContent=n.published?(dirty||hasDraft(n)?'发布更新':'重新发布'):'发布';$('#unpublishBtn').hidden=!n.published}
 function resolvePending(action){if(!dirty)return true;if(confirm('当前内容还没有保存。是否先存入草稿箱，再'+action+'？')){save();return true}return confirm('不保存这些修改，直接'+action+'？')}
 function changed(){if(restoring)return;dirty=true;status.textContent=autoSave?'正在自动保存草稿…':'有未保存的草稿';updatePublishControls();clearTimeout(saveTimer);if(autoSave)saveTimer=setTimeout(save,700);clearTimeout(historyTimer);historyTimer=setTimeout(recordHistory,250);count();updateOutline()}
@@ -148,8 +158,8 @@ $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>ta
 content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
 autoSaveToggle.checked=autoSave;
 autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
-$('#saveBtn').onclick=()=>{clearTimeout(saveTimer);save()};
-$('#draftBtn').onclick=()=>{clearTimeout(saveTimer);if(save(true))alert('已经存入草稿箱。返回主页后点击“草稿箱”即可看到。')};
+$('#saveBtn').onclick=async()=>{clearTimeout(saveTimer);if(save()){const ok=await lastCloudSync;if(!ok)alert('当前电脑已保存，但云端同步失败，请稍后再按一次 Ctrl+S。')}};
+$('#draftBtn').onclick=async()=>{clearTimeout(saveTimer);if(save(true)){const ok=await lastCloudSync;alert(ok?'已经存入云端草稿箱。返回主页后点击“草稿箱”即可看到。':'当前电脑已保存草稿，但云端同步失败，请不要关闭页面，稍后再次点击“存入草稿箱”。')}};
 $('#newBtn').onclick=create;
 $('#noteList').onclick=e=>{const b=e.target.closest('.note');if(!b||b.dataset.id===current)return;if(!resolvePending('切换文章'))return;current=b.dataset.id;show();render()};
 $('#search').oninput=e=>render(e.target.value);
@@ -162,4 +172,27 @@ $('#unpublishBtn').onclick=unpublishCurrent;
 $('#deleteBtn').onclick=()=>{if(!confirm('确定删除这篇文章吗？此操作不能撤销。'))return;const deleted=current;data=data.filter(x=>x.id!==current);current=data[0]?.id||null;localStorage.setItem(KEY,JSON.stringify(data));window.blogCloud?.deleteNote(deleted).catch(e=>alert('云端删除失败：'+e.message));current?show():create();render()};
 $('#exportBtn').onclick=()=>{save();const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='我的笔记备份-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href)};
 $('#importFile').onchange=async e=>{try{const x=JSON.parse(await e.target.files[0].text());if(!Array.isArray(x))throw 0;if(confirm('导入会替换当前浏览器里的文章，确定继续吗？')){data=x;current=data[0]?.id||null;persist();current?show():create();render()}}catch{alert('备份文件格式不正确')}e.target.value=''};
-window.addEventListener('beforeunload',e=>{if(autoSave&&dirty)save();else if(dirty){e.preventDefault();e.returnValue=''}});show();render();
+window.addEventListener('beforeunload',e=>{if(autoSave&&dirty)save();else if(dirty){e.preventDefault();e.returnValue=''}});
+async function importLegacyIfNeeded(){
+ if(params.get('legacy')!=='1'||requestedId!=='mdb-protocol-study')return;
+ const existing=data.find(n=>String(n.id)===requestedId||normalizeTitle(n.title)==='mdb协议学习记录');
+ if(existing){current=String(existing.id);return}
+ status.textContent='正在把旧文章导入私人云端…';
+ const response=await fetch('articles/mdb-protocol-study.html',{cache:'no-store'});
+ if(!response.ok)throw new Error('无法读取旧文章');
+ const doc=new DOMParser().parseFromString(await response.text(),'text/html'),bodyNode=doc.querySelector('.study-content');
+ if(!bodyNode)throw new Error('旧文章正文格式无法识别');
+ const n={id:'mdb-protocol-study',title:doc.querySelector('h1')?.textContent?.trim()||'MDB 协议学习记录',body:bodyNode.innerHTML,published:true,updated:Date.UTC(2026,6,23),createdAt:Date.UTC(2026,6,23),publishedAt:Date.UTC(2026,6,23)};
+ data.unshift(n);current=n.id;
+ if(!persist())throw new Error('本地保存失败');
+ if(!await lastCloudSync)throw new Error('Supabase 云端同步失败');
+ alert('旧版 MDB 文章已转为云端文章。以后它和其他文章一样可以重新编辑、保存草稿和发布更新。')
+}
+async function bootstrap(){
+ try{await importLegacyIfNeeded()}catch(e){console.error(e);alert('旧文章导入失败：'+e.message+'。原文章没有删除，请稍后重试。')}
+ if(!data.length){create();return}
+ if(requestedId&&data.some(n=>String(n.id)===String(requestedId)))current=String(requestedId);
+ else if(!data.some(n=>String(n.id)===String(current)))current=String(data[0].id);
+ show();render()
+}
+bootstrap();
