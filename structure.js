@@ -209,14 +209,14 @@ function appendSegment(fragment,seg,asHeading,headingIndex){
 }
 function structureHtml(html,noteId=''){
   const original=String(html||''),legacy=String(noteId)==='mdb-protocol-study'||/DDR5MDB02|协议版本[:：]\s*DDR5MDB02/i.test(original);
-  const probe=document.createElement('div');probe.innerHTML=original;
-  const existingTables=probe.querySelectorAll('table').length,existingHeadings=probe.querySelectorAll('h1,h2,h3,h4').length;
+  const existingTables=(original.match(/<table\b/gi)||[]).length,existingHeadings=(original.match(/<h[1-4]\b/gi)||[]).length;
   const requiredTables=['3.2-3.3','3.6-transparent','3.7-pass-through','4.1-self-refresh'];
-  const hasAllKnownTables=requiredTables.every(id=>probe.querySelector('table[data-restored-table="'+id+'"]'));
-  // 只有新版本标记、标题、普通表格和这张特殊合并表都存在时，才跳过恢复。
+  const hasAllKnownTables=requiredTables.every(id=>original.includes('data-restored-table="'+id+'"'));
+  // 已完成恢复的长文直接用字符串标记判断，避免每次打开文章都重复解析整份 HTML。
   if(!legacy||(original.includes(MARK)&&existingTables>0&&existingHeadings>0&&hasAllKnownTables)){
     return{html:original,changed:false,tables:existingTables,headings:existingHeadings}
   }
+  const probe=document.createElement('div');probe.innerHTML=original;
   const root=document.createElement('div');root.innerHTML=original.replace(/<!--blog-structure-v\d+-->/g,'');
   restoreAllKnownTables(root);
   const segments=splitSegments(root),fragment=document.createDocumentFragment();
