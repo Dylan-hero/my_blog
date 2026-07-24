@@ -41,4 +41,5 @@ function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return
 let cloudRefreshing=false;async function refreshAll(){if(cloudRefreshing)return;cloudRefreshing=true;try{if(window.__PRIVATE_MODE__&&window.blogCloud)await window.blogCloud.refresh()}catch(e){console.warn(e)}cloudRefreshing=false;reloadData()}
 window.addEventListener('pageshow',refreshAll);window.addEventListener('focus',refreshAll);
 window.addEventListener('storage',e=>{if(e.key===KEY)reloadData()});
+window.addEventListener('blog-cloud-refreshed',reloadData);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAll()});reloadData();
