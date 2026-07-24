@@ -1,5 +1,5 @@
 (()=>{
-const MARK='<!--blog-structure-v2-->';
+const MARK='<!--blog-structure-v3-->';
 const BLOCK_TAGS=new Set(['TABLE','H1','H2','H3','H4','P','DIV','BLOCKQUOTE','UL','OL','NAV','HR']);
 
 function segmentFrom(nodes,block=false){
@@ -22,6 +22,35 @@ function splitSegments(root){
   return segments
 }
 function cleanText(value){return String(value||'').replace(/^[\s\u2003\t]+/,'').replace(/[\s\u2003\t]+$/,'')}
+function topChild(root,node){while(node&&node.parentNode!==root)node=node.parentNode;return node}
+function findTopByText(root,pattern){
+  const walker=document.createTreeWalker(root,4);let node;
+  while((node=walker.nextNode()))if(pattern.test(cleanText(node.nodeValue)))return topChild(root,node);
+  return null
+}
+function restoreModeSummaryTable(root){
+  if(root.querySelector('table[data-restored-table="3.2-3.3"]'))return false;
+  const start=findTopByText(root,/^3\.2-3\.3总结$/),end=findTopByText(root,/^3\.4\s+Early Swizzle Discovery$/i);
+  if(!start||!end||start===end)return false;
+  let node=start.nextSibling;
+  while(node&&node!==end){const next=node.nextSibling;node.remove();node=next}
+  if(node!==end)return false;
+  const wrap=document.createElement('div');wrap.className='table-scroll';
+  wrap.innerHTML=`<table data-restored-table="3.2-3.3">
+    <thead><tr><th>工作模式</th><th>DRAM interface</th><th>HOST interface</th><th>tHDQS（DQS 的虚拟周期或 2UI 时间）</th><th>接口说明</th></tr></thead>
+    <tbody>
+      <tr><th rowspan="4">MUX MODE</th><td>X4</td><td>Nibble mode</td><td rowspan="4">tHDQS = tBCK / 2<br>细分速率档位七个</td><td>DRAM侧：MDQS0/1 都作选通，总共 8bit，接两个 x4 颗粒。<br>HOST侧：DQS0/1 都使用，总共 8bit，速率 ≤ 8.8GT/s，CRC 禁用。</td></tr>
+      <tr><td>X4</td><td>Byte mode</td><td>DRAM侧：MDQS0/1 都作选通，总共 8bit，接两个 x4 颗粒。<br>HOST侧：仅 DQS0 作选通，总共 8bit，速率 ≥ 8.0GT/s；启用 CRC 时速率要求 ≥ 8.8GT/s，DQS1_t/c 作为差分 CRC 信号。</td></tr>
+      <tr><td>X8</td><td>Byte mode</td><td>DRAM侧：MDQS0 作选通，接一个 x8 颗粒，MDQS1 悬空（RTT_PARK）。<br>HOST侧：仅 DQS0 作选通，总共 8bit，速率 ≥ 8.0GT/s；启用 CRC 时速率要求 ≥ 8.8GT/s，DQS1_t/c 作为差分 CRC 信号。</td></tr>
+      <tr><td>X8</td><td>Nibble mode</td><td>DRAM侧：MDQS0 作选通，接一个 x8 颗粒，MDQS1 悬空。<br>HOST侧：DQS0/1 都作选通，速率 ≤ 8.8GT/s，CRC 禁用。</td></tr>
+      <tr><th rowspan="4">RANK MODE</th><td>X4</td><td>Nibble mode</td><td rowspan="4">tHDQS = tBCK<br>细分速率档位四个</td><td>DRAM侧：MDQS0/1 都作选通，总共 8bit，接两个 x4 颗粒。<br>HOST侧：DQS0/1 都作选通，总共 8bit，速率 ≤ 8.8GT/s，CRC 禁用。</td></tr>
+      <tr><td>X4</td><td>Byte mode</td><td>不支持（3.3 节：RANK 模式下，Host interface 只支持 X4）。</td></tr>
+      <tr><td>X8</td><td>Byte mode</td><td>不支持（3.3 节：RANK 模式下，Host interface 只支持 X4）。</td></tr>
+      <tr><td>X8</td><td>Nibble mode</td><td>DRAM侧：MDQS0 作选通，总共 8bit，接两个 x4 颗粒，MDQS1 断开。<br>HOST侧：DQS0/1 都作选通，速率 ≤ 8.8GT/s，CRC 禁用。</td></tr>
+    </tbody>
+  </table>`;
+  root.insertBefore(wrap,end);root.insertBefore(document.createElement('br'),end);return true
+}
 function isIndented(seg){return /^[\u2003\t]/.test(seg.raw||'')}
 function isIndentedBlank(seg){return isIndented(seg)&&cleanText(seg.raw)===''}
 function cellHtml(seg){
@@ -98,11 +127,13 @@ function structureHtml(html,noteId=''){
   const original=String(html||''),legacy=String(noteId)==='mdb-protocol-study'||/DDR5MDB02|协议版本[:：]\s*DDR5MDB02/i.test(original);
   const probe=document.createElement('div');probe.innerHTML=original;
   const existingTables=probe.querySelectorAll('table').length,existingHeadings=probe.querySelectorAll('h1,h2,h3,h4').length;
-  // 旧版本可能写入了标记却没有真正生成表格；只有结构确实存在时才跳过修复。
-  if(!legacy||(original.includes(MARK)&&existingTables>0&&existingHeadings>0)){
+  const hasModeSummary=!!probe.querySelector('table[data-restored-table="3.2-3.3"]');
+  // 只有新版本标记、标题、普通表格和这张特殊合并表都存在时，才跳过恢复。
+  if(!legacy||(original.includes(MARK)&&existingTables>0&&existingHeadings>0&&hasModeSummary)){
     return{html:original,changed:false,tables:existingTables,headings:existingHeadings}
   }
-  const root=document.createElement('div');root.innerHTML=original.split(MARK).join('');
+  const root=document.createElement('div');root.innerHTML=original.replace(/<!--blog-structure-v\d+-->/g,'');
+  restoreModeSummaryTable(root);
   const segments=splitSegments(root),fragment=document.createDocumentFragment();
   let contentStarted=false,tableCount=0,headingCount=0;
   for(let i=0;i<segments.length;){
@@ -117,7 +148,7 @@ function structureHtml(html,noteId=''){
     appendSegment(fragment,seg,0,0);i++
   }
   const output=document.createElement('div');output.appendChild(fragment);
-  return{html:MARK+output.innerHTML,changed:true,tables:tableCount,headings:headingCount}
+  return{html:MARK+output.innerHTML,changed:true,tables:output.querySelectorAll('table').length,headings:output.querySelectorAll('h1,h2,h3,h4').length}
 }
 window.blogStructure={structureHtml,mark:MARK};
 })();
