@@ -173,6 +173,103 @@ function tableAction(type){restoreSelection();const cell=currentCell(),table=cel
  if(type==='delCol'){[...table.rows].forEach(r=>r.children[index]?.remove());if(!table.rows[0]?.cells.length)table.remove()}
  if(type==='delTable'&&confirm('确定删除整个表格吗？'))table.remove();changed()
 }
+
+let activeTableCell=null,tableResize=null;
+function logicalColumnIndex(cell){let index=0;for(const sibling of cell.parentElement.cells){if(sibling===cell)break;index+=Math.max(1,sibling.colSpan||1)}return index}
+function tableColumnCount(table){return Math.max(1,...[...table.rows].map(row=>[...row.cells].reduce((sum,cell)=>sum+Math.max(1,cell.colSpan||1),0)))}
+function ensureColgroup(table){
+ let group=table.querySelector(':scope > colgroup');
+ if(!group){group=document.createElement('colgroup');group.dataset.userColumns='true';table.insertBefore(group,table.firstChild)}
+ const count=tableColumnCount(table);
+ while(group.children.length<count)group.appendChild(document.createElement('col'));
+ while(group.children.length>count)group.lastElementChild.remove();
+ return group
+}
+function tableColumnCells(cell){
+ const column=logicalColumnIndex(cell),table=cell.closest('table');
+ return[...table.querySelectorAll('th,td')].filter(item=>{const start=logicalColumnIndex(item);return start<=column&&column<start+Math.max(1,item.colSpan||1)})
+}
+function tableTargets(cell,scope){
+ const table=cell.closest('table');
+ if(scope==='row')return[...cell.parentElement.cells];
+ if(scope==='column')return tableColumnCells(cell);
+ if(scope==='table')return[...table.querySelectorAll('th,td')];
+ return[cell]
+}
+function styleNumber(element,property,fallback=0){const value=parseFloat(getComputedStyle(element)[property]);return Number.isFinite(value)?Math.round(value):fallback}
+function colorHex(value,fallback='#ffffff'){
+ const parts=String(value||'').match(/[\d.]+/g);if(!parts||parts.length<3||Number(parts[3])===0)return fallback;
+ return'#'+parts.slice(0,3).map(value=>Math.max(0,Math.min(255,Math.round(Number(value)))).toString(16).padStart(2,'0')).join('')
+}
+function closeTableDialog(){const dialog=$('#tableDialog');if(typeof dialog.close==='function')dialog.close();else dialog.removeAttribute('open')}
+function openTableDialog(){
+ restoreSelection();const cell=currentCell(),table=cell?.closest('table');
+ if(!cell||!table){alert('请先把光标放进需要设置的表格单元格中。');return}
+ activeTableCell=cell;
+ const cellStyle=getComputedStyle(cell),tableRect=table.getBoundingClientRect(),contentRect=content.getBoundingClientRect();
+ $('#tableWidth').value=Math.max(20,Math.min(200,Math.round(tableRect.width/Math.max(1,contentRect.width)*100)))||100;
+ $('#columnWidth').value=Math.max(40,Math.round(cell.getBoundingClientRect().width/Math.max(1,cell.colSpan||1)));
+ $('#rowHeight').value=Math.max(24,Math.round(cell.parentElement.getBoundingClientRect().height));
+ $('#cellPaddingY').value=styleNumber(cell,'paddingTop',8);$('#cellPaddingX').value=styleNumber(cell,'paddingLeft',10);
+ const ratio=parseFloat(cellStyle.lineHeight)/Math.max(1,parseFloat(cellStyle.fontSize)),choices=[1,1.15,1.5,1.75,2,2.5];
+ $('#cellLineHeight').value=String(choices.reduce((best,value)=>Math.abs(value-ratio)<Math.abs(best-ratio)?value:best,1.5));
+ $('#tableBorderWidth').value=styleNumber(cell,'borderTopWidth',1);
+ $('#tableBorderColor').value=colorHex(cellStyle.borderTopColor,'#565656');$('#tableFillColor').value=colorHex(cellStyle.backgroundColor,'#ffffff');
+ $('#tableTextAlign').value=['center','right'].includes(cellStyle.textAlign)?cellStyle.textAlign:'left';
+ $('#tableVerticalAlign').value=['middle','bottom'].includes(cellStyle.verticalAlign)?cellStyle.verticalAlign:'top';
+ const dialog=$('#tableDialog');if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','')
+}
+function applyTableProperties(){
+ const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!cell||!table){closeTableDialog();return}
+ const scope=$('#tableScope').value,targets=tableTargets(cell,scope);
+ const width=Math.max(20,Math.min(200,Number($('#tableWidth').value)||100)),columnWidth=Math.max(40,Math.min(800,Number($('#columnWidth').value)||120));
+ const rowHeight=Math.max(24,Math.min(500,Number($('#rowHeight').value)||32)),paddingY=Math.max(0,Math.min(80,Number($('#cellPaddingY').value)||0)),paddingX=Math.max(0,Math.min(120,Number($('#cellPaddingX').value)||0));
+ const lineHeight=$('#cellLineHeight').value,borderWidth=Math.max(0,Math.min(12,Number($('#tableBorderWidth').value)||0)),borderColor=$('#tableBorderColor').value,fillColor=$('#tableFillColor').value;
+ table.style.width=width+'%';table.style.minWidth='0';table.style.maxWidth='none';table.style.tableLayout='fixed';table.style.borderCollapse='collapse';
+ const group=ensureColgroup(table),column=logicalColumnIndex(cell);if(group.children[column])group.children[column].style.width=columnWidth+'px';
+ const rows=scope==='table'?[...table.rows]:[cell.parentElement];rows.forEach(row=>row.style.height=rowHeight+'px');
+ targets.forEach(target=>{
+   target.style.padding=paddingY+'px '+paddingX+'px';target.style.lineHeight=lineHeight;target.style.borderStyle='solid';target.style.borderWidth=borderWidth+'px';target.style.borderColor=borderColor;
+   target.style.backgroundColor=fillColor;target.style.textAlign=$('#tableTextAlign').value;target.style.verticalAlign=$('#tableVerticalAlign').value
+ });
+ closeTableDialog();changed()
+}
+function resetTableSizing(){
+ const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!table){closeTableDialog();return}
+ ['width','min-width','max-width','table-layout'].forEach(property=>table.style.removeProperty(property));
+ table.querySelectorAll(':scope > colgroup > col').forEach(col=>col.style.removeProperty('width'));
+ [...table.rows].forEach(row=>row.style.removeProperty('height'));
+ table.querySelectorAll('th,td').forEach(item=>{item.style.removeProperty('width');item.style.removeProperty('height')});
+ closeTableDialog();changed()
+}
+function resizeEdge(event,cell){
+ const rect=cell.getBoundingClientRect(),distance=7;
+ if(Math.abs(event.clientX-rect.right)<=distance)return'column';
+ if(Math.abs(event.clientY-rect.bottom)<=distance)return'row';
+ return''
+}
+content.addEventListener('pointermove',event=>{
+ if(tableResize)return;const cell=event.target.closest?.('td,th');const mode=cell?resizeEdge(event,cell):'';
+ content.style.cursor=mode==='column'?'col-resize':mode==='row'?'row-resize':''
+});
+content.addEventListener('pointerleave',()=>{if(!tableResize)content.style.cursor=''});
+content.addEventListener('pointerdown',event=>{
+ if(event.button!==0)return;const cell=event.target.closest?.('td,th'),mode=cell?resizeEdge(event,cell):'';if(!mode)return;
+ event.preventDefault();activeTableCell=cell;const table=cell.closest('table'),rect=cell.getBoundingClientRect();
+ if(mode==='column'){
+   const group=ensureColgroup(table),column=logicalColumnIndex(cell),col=group.children[column],startSize=rect.width/Math.max(1,cell.colSpan||1);
+   tableResize={mode,start:event.clientX,startSize,startTableWidth:table.getBoundingClientRect().width,table,col}
+ }else tableResize={mode,start:event.clientY,startSize:cell.parentElement.getBoundingClientRect().height,row:cell.parentElement}
+});
+document.addEventListener('pointermove',event=>{
+ if(!tableResize)return;
+ if(tableResize.mode==='column'){
+   const size=Math.max(40,Math.min(800,tableResize.startSize+event.clientX-tableResize.start)),delta=size-tableResize.startSize;
+   tableResize.col.style.width=size+'px';tableResize.table.style.tableLayout='fixed';tableResize.table.style.width=Math.max(120,tableResize.startTableWidth+delta)+'px';tableResize.table.style.maxWidth='none'
+ }else tableResize.row.style.height=Math.max(24,Math.min(500,tableResize.startSize+event.clientY-tableResize.start))+'px'
+});
+document.addEventListener('pointerup',()=>{if(!tableResize)return;tableResize=null;content.style.cursor='';changed()});
+
 function getBlocksInSelection(){const r=getRange(),all=[...content.querySelectorAll('p,div,h1,h2,h3,h4,blockquote,li,td,th')];const hit=all.filter(x=>{try{return r.intersectsNode(x)}catch{return false}});if(hit.length)return hit.filter(x=>!hit.some(y=>y!==x&&y.contains(x)));let n=r.startContainer.nodeType===3?r.startContainer.parentElement:r.startContainer;return[n.closest('p,div,h1,h2,h3,h4,blockquote,li,td,th')||content]}
 function applyLineHeight(value){restoreSelection();getBlocksInSelection().forEach(x=>x.style.lineHeight=value);changed()}
 function applyCommand(cmd,value=null){restoreSelection();document.execCommand('styleWithCSS',false,true);document.execCommand(cmd,false,value);rememberRange();changed()}
@@ -192,6 +289,7 @@ $('#lineHeight').onchange=e=>applyLineHeight(e.target.value);
 $('#tableBtn').onclick=()=>{const rv=prompt('表格行数（1～30）：','4');if(rv===null)return;const cv=prompt('表格列数（1～12）：','3');if(cv===null)return;const r=Math.min(30,Math.max(1,parseInt(rv)||1)),c=Math.min(12,Math.max(1,parseInt(cv)||1));makeTable(r,c)};
 $('#tocBtn').onclick=insertOrUpdateTOC;
 $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>tableAction('addCol');$('#delRowBtn').onclick=()=>tableAction('delRow');$('#delColBtn').onclick=()=>tableAction('delCol');$('#delTableBtn').onclick=()=>tableAction('delTable');
+$('#tablePropsBtn').onclick=openTableDialog;$('#tableDialogClose').onclick=closeTableDialog;$('#tableApplyBtn').onclick=applyTableProperties;$('#tableResetBtn').onclick=resetTableSizing;
 content.addEventListener('click',e=>{const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
 autoSaveToggle.checked=autoSave;
 autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
