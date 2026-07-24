@@ -4,17 +4,21 @@ const samples=[
  {id:'sample2',title:'从记录开始',body:'<p>不必等到想法完整才落笔。先写下一句话，知识会在反复整理中慢慢形成。</p>',updated:Date.now()-86400000,published:true}
 ];
 const staticPosts=[
- {id:'mdb-protocol-study',title:'MDB 协议学习记录',excerpt:'DDR5 MDB 协议、数据通路、初始化、CRC 与训练相关学习记录。',url:'articles/mdb-protocol-study.html',updated:Date.UTC(2026,6,23),published:true}
+ {id:'mdb-protocol-study',title:'MDB 协议学习记录',excerpt:'DDR5 MDB 协议、数据通路、初始化、CRC 与训练相关学习记录。',legacy:true,url:'articles/mdb-protocol-study.html',updated:Date.UTC(2026,6,23),published:true}
 ];
 function storedNotes(){if(Array.isArray(window.__CLOUD_NOTES__))return window.__CLOUD_NOTES__;try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:[]}catch{return[]}}
 function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
 function draftTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n.title||'')}
 function draftBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n.body||'')}
+function normalizeTitle(s){return String(s||'').replace(/\\s+/g,'').toLowerCase()}
 const box=document.querySelector('#posts'),dlg=document.querySelector('#reader');
 let view='published',stored=[],usingSamples=true,published=[],drafts=[];
 function reloadData(){
  stored=storedNotes();usingSamples=!window.__PRIVATE_MODE__&&!stored.length;
- const source=usingSamples?samples:stored.filter(n=>n.published);published=[...staticPosts,...source.filter(n=>!staticPosts.some(s=>s.id===n.id))].sort((a,b)=>b.updated-a.updated);
+ const source=usingSamples?samples:stored.filter(n=>n.published);
+ const sourceIds=new Set(source.map(n=>String(n.id))),sourceTitles=new Set(source.map(n=>normalizeTitle(n.title)));
+ const fallbacks=staticPosts.filter(s=>!sourceIds.has(String(s.id))&&!sourceTitles.has(normalizeTitle(s.title)));
+ published=[...source,...fallbacks].sort((a,b)=>b.updated-a.updated);
  drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
  publishedCount.textContent=published.length;draftCount.textContent=drafts.length;render();
 }
@@ -29,7 +33,7 @@ function render(){
  }).join(''):'<div class="empty">'+(view==='published'?'还没有发布文章。':'草稿箱是空的。')+'</div>'
 }
 document.querySelectorAll('.library-tab').forEach(b=>b.onclick=()=>{view=b.dataset.view;document.querySelectorAll('.library-tab').forEach(x=>x.classList.toggle('active',x===b));render()});
-box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>x.id===c.dataset.id);if(!p)return;if(p.url){location.href=p.url;return}if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}readTitle.textContent=p.title||'无标题文章';readDate.textContent=new Date(p.updated).toLocaleDateString('zh-CN');readBody.innerHTML=p.body||'';editPost.hidden=usingSamples;editPost.href='editor.html?id='+encodeURIComponent(p.id);dlg.showModal()};
+box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>String(x.id)===c.dataset.id);if(!p)return;if(p.url){location.href=p.url;return}if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}readTitle.textContent=p.title||'无标题文章';readDate.textContent=new Date(p.updated).toLocaleDateString('zh-CN');readBody.innerHTML=p.body||'';editPost.hidden=usingSamples;editPost.href='editor.html?id='+encodeURIComponent(p.id);dlg.showModal()};
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return(d.textContent||'').trim()}
 document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
