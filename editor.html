@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-table4">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps1">
 </head>
-<body class="editor-page private-blog" data-main="editor.js?v=20260724-restore1">
+<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps1">
 <section id="authGate" class="auth-gate" hidden>
   <div class="auth-card"><span class="auth-mark">私人写作台</span><h1>我的笔记</h1><p id="authMessage">使用你的GitHub账号登录后，才能编辑和同步文章。</p><button id="githubLogin" class="github-login">使用 GitHub 登录</button><small>只有账号 Dylan-hero 可以进入</small></div>
 </section><div id="appShell" hidden>
@@ -80,6 +80,7 @@
         <div class="ribbon-row table-actions">
           <button id="addRowBtn" title="在当前行后添加">＋行</button><button id="addColBtn" title="在当前列后添加">＋列</button>
           <button id="delRowBtn">－行</button><button id="delColBtn">－列</button><button id="delTableBtn">删表</button>
+          <button id="tablePropsBtn" title="调整表格宽度、行高、边框和单元格格式">表格属性</button>
           <button id="clipboardBtn" title="检查 Word 提供给浏览器的数据">剪贴板检查</button>
         </div>
         <span>插入与表格</span>
@@ -89,6 +90,26 @@
     <div class="editor-foot"><span id="words">0 字</span><span class="hint">标题将自动出现在左侧导航窗格</span><button class="danger" id="deleteBtn">删除文章</button></div>
   </main>
 </div>
+<dialog id="tableDialog" class="table-dialog">
+  <button id="tableDialogClose" class="dialog-close" type="button" aria-label="关闭">×</button>
+  <h2>表格属性</h2>
+  <p class="table-dialog-tip">先把光标放进单元格。列宽和行高也可以在表格中直接拖动单元格的右边缘或下边缘。</p>
+  <div class="table-form">
+    <label>应用范围<select id="tableScope"><option value="cell">当前单元格</option><option value="row">当前行</option><option value="column">当前列</option><option value="table">整张表格</option></select></label>
+    <label>表格宽度（%）<input id="tableWidth" type="number" min="20" max="200" step="5" value="100"></label>
+    <label>当前列宽（px）<input id="columnWidth" type="number" min="40" max="800" step="5"></label>
+    <label>行高（px）<input id="rowHeight" type="number" min="24" max="500" step="2"></label>
+    <label>上下内边距（px）<input id="cellPaddingY" type="number" min="0" max="80" step="1"></label>
+    <label>左右内边距（px）<input id="cellPaddingX" type="number" min="0" max="120" step="1"></label>
+    <label>单元格行距<select id="cellLineHeight"><option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="1.75">1.75</option><option value="2">2.0</option><option value="2.5">2.5</option></select></label>
+    <label>边框宽度（px）<input id="tableBorderWidth" type="number" min="0" max="12" step="1"></label>
+    <label>边框颜色<input id="tableBorderColor" type="color" value="#565656"></label>
+    <label>填充颜色<input id="tableFillColor" type="color" value="#ffffff"></label>
+    <label>水平对齐<select id="tableTextAlign"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
+    <label>垂直对齐<select id="tableVerticalAlign"><option value="top">顶端</option><option value="middle">居中</option><option value="bottom">底端</option></select></label>
+  </div>
+  <div class="dialog-actions"><button id="tableResetBtn" type="button">恢复自适应</button><button id="tableApplyBtn" class="button" type="button">应用</button></div>
+</dialog>
 </div>
-<script src="vendor/supabase.js"></script><script src="cloud-config.js"></script><script src="structure.js?v=20260724-table4"></script><script src="cloud.js?v=20260724-4"></script>
+<script src="vendor/supabase.js"></script><script src="cloud-config.js"></script><script src="structure.js?v=20260724-wps1"></script><script src="cloud.js?v=20260724-fast1"></script>
 </body></html>
