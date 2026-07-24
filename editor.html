@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps1">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps2">
 </head>
-<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps1">
+<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps2">
 <section id="authGate" class="auth-gate" hidden>
   <div class="auth-card"><span class="auth-mark">私人写作台</span><h1>我的笔记</h1><p id="authMessage">使用你的GitHub账号登录后，才能编辑和同步文章。</p><button id="githubLogin" class="github-login">使用 GitHub 登录</button><small>只有账号 Dylan-hero 可以进入</small></div>
 </section><div id="appShell" hidden>
@@ -74,7 +74,7 @@
       </div>
       <div class="ribbon-group insert-group">
         <div class="ribbon-row">
-          <button id="tableBtn">▦ 表格</button><button id="tocBtn">☷ 目录</button><button id="linkBtn">🔗 链接</button>
+          <button id="tableBtn" aria-haspopup="true" aria-expanded="false">▦ 表格 ▾</button><button id="tocBtn">☷ 目录</button><button id="linkBtn">🔗 链接</button>
           <label class="image-btn">图片<input id="imageFile" type="file" accept="image/*" multiple></label>
         </div>
         <div class="ribbon-row table-actions">
@@ -90,21 +90,41 @@
     <div class="editor-foot"><span id="words">0 字</span><span class="hint">标题将自动出现在左侧导航窗格</span><button class="danger" id="deleteBtn">删除文章</button></div>
   </main>
 </div>
+<section id="tablePicker" class="table-picker" hidden>
+  <div class="table-picker-head"><strong id="tablePickerLabel">1 行 × 1 列 表格</strong><button id="moreTableBtn" type="button">更多行列</button></div>
+  <div id="tableGrid" class="table-grid" role="grid" aria-label="选择表格行列数"></div>
+  <div class="table-theme">
+    <span>主题颜色</span>
+    <div id="tableThemeColors" class="table-theme-colors" aria-label="表格主题颜色"></div>
+  </div>
+</section>
+<div id="tableTools" class="table-tools" hidden>
+  <div id="tableSelectionFrame" class="table-selection-frame"></div>
+  <button id="tableMoveHandle" class="table-move-handle" type="button" title="选择整张表格；双击打开表格属性">⠿</button>
+  <button id="quickAddCol" class="table-quick-add table-quick-add-col" type="button" title="在右侧添加一列">＋</button>
+  <button id="quickAddRow" class="table-quick-add table-quick-add-row" type="button" title="在下方添加一行">＋</button>
+  <div id="tableResizeGuide" class="table-resize-guide"></div>
+</div>
 <dialog id="tableDialog" class="table-dialog">
   <button id="tableDialogClose" class="dialog-close" type="button" aria-label="关闭">×</button>
   <h2>表格属性</h2>
   <p class="table-dialog-tip">先把光标放进单元格。列宽和行高也可以在表格中直接拖动单元格的右边缘或下边缘。</p>
   <div class="table-form">
     <label>应用范围<select id="tableScope"><option value="cell">当前单元格</option><option value="row">当前行</option><option value="column">当前列</option><option value="table">整张表格</option></select></label>
+    <label>自动调整<select id="tableAutoFit"><option value="fixed">固定列宽</option><option value="window">根据窗口调整</option><option value="content">根据内容调整</option></select></label>
     <label>表格宽度（%）<input id="tableWidth" type="number" min="20" max="200" step="5" value="100"></label>
     <label>当前列宽（px）<input id="columnWidth" type="number" min="40" max="800" step="5"></label>
     <label>行高（px）<input id="rowHeight" type="number" min="24" max="500" step="2"></label>
-    <label>上下内边距（px）<input id="cellPaddingY" type="number" min="0" max="80" step="1"></label>
-    <label>左右内边距（px）<input id="cellPaddingX" type="number" min="0" max="120" step="1"></label>
+    <label>单元格上边距（px）<input id="cellPaddingTop" type="number" min="0" max="80" step="1"></label>
+    <label>单元格下边距（px）<input id="cellPaddingBottom" type="number" min="0" max="80" step="1"></label>
+    <label>单元格左边距（px）<input id="cellPaddingLeft" type="number" min="0" max="120" step="1"></label>
+    <label>单元格右边距（px）<input id="cellPaddingRight" type="number" min="0" max="120" step="1"></label>
+    <label>单元格间距（px）<input id="cellSpacing" type="number" min="0" max="30" step="1"></label>
     <label>单元格行距<select id="cellLineHeight"><option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="1.75">1.75</option><option value="2">2.0</option><option value="2.5">2.5</option></select></label>
     <label>边框宽度（px）<input id="tableBorderWidth" type="number" min="0" max="12" step="1"></label>
     <label>边框颜色<input id="tableBorderColor" type="color" value="#565656"></label>
     <label>填充颜色<input id="tableFillColor" type="color" value="#ffffff"></label>
+    <label>表格对齐<select id="tableAlign"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
     <label>水平对齐<select id="tableTextAlign"><option value="left">左对齐</option><option value="center">居中</option><option value="right">右对齐</option></select></label>
     <label>垂直对齐<select id="tableVerticalAlign"><option value="top">顶端</option><option value="middle">居中</option><option value="bottom">底端</option></select></label>
   </div>
