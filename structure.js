@@ -96,11 +96,13 @@ function appendSegment(fragment,seg,asHeading,headingIndex){
 }
 function structureHtml(html,noteId=''){
   const original=String(html||''),legacy=String(noteId)==='mdb-protocol-study'||/DDR5MDB02|协议版本[:：]\s*DDR5MDB02/i.test(original);
-  if(!legacy||original.includes(MARK)){
-    const probe=document.createElement('div');probe.innerHTML=original;
-    return{html:original,changed:false,tables:probe.querySelectorAll('table').length,headings:probe.querySelectorAll('h1,h2,h3,h4').length}
+  const probe=document.createElement('div');probe.innerHTML=original;
+  const existingTables=probe.querySelectorAll('table').length,existingHeadings=probe.querySelectorAll('h1,h2,h3,h4').length;
+  // 旧版本可能写入了标记却没有真正生成表格；只有结构确实存在时才跳过修复。
+  if(!legacy||(original.includes(MARK)&&existingTables>0&&existingHeadings>0)){
+    return{html:original,changed:false,tables:existingTables,headings:existingHeadings}
   }
-  const root=document.createElement('div');root.innerHTML=original;
+  const root=document.createElement('div');root.innerHTML=original.split(MARK).join('');
   const segments=splitSegments(root),fragment=document.createDocumentFragment();
   let contentStarted=false,tableCount=0,headingCount=0;
   for(let i=0;i<segments.length;){
