@@ -11,7 +11,7 @@ async function saveNote(n){if(!session)throw new Error('尚未登录');const{err
 async function deleteNote(id){if(!session)return;const{error}=await client.from('blog_notes').delete().eq('id',String(id));if(error)throw error}
 async function migrateLocal(notes){for(const n of notes)await saveNote(n);return loadNotes()}
 function getLocal(){try{const n=JSON.parse(localStorage.getItem(LOCAL_KEY));return Array.isArray(n)?n:[]}catch{return[]}}
-function githubName(user){const m=user?.user_metadata||{};return m.user_name||m.preferred_username||m.userName||m.name||user?.email||'GitHub用户'}
+function githubName(user){const m=user?.user_metadata||{},g=(user?.identities||[]).find(x=>x.provider==='github')?.identity_data||{};return m.user_name||m.preferred_username||m.userName||g.user_name||g.preferred_username||g.login||m.name||user?.email||'GitHub用户'}
 function showFatal(message){const g=document.getElementById('authGate');if(g){g.hidden=false;g.innerHTML='<div class="auth-card"><h1>连接失败</h1><p>'+escapeHtml(message)+'</p></div>'}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function loadMain(){const src=document.body.dataset.main;if(!src)return;const s=document.createElement('script');s.src=src;s.onerror=()=>showFatal('页面程序加载失败，请强制刷新。');document.body.appendChild(s)}
