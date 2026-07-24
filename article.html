@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>文章 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-reader1">
+</head>
+<body class="private-blog article-reader-page" data-main="article.js?v=20260724-reader1">
+<section id="authGate" class="auth-gate">
+  <div class="auth-card"><span class="auth-mark">私人博客</span><h1>我的笔记</h1><p id="authMessage">使用你的 GitHub 账号登录后，才能阅读私人文章。</p><button id="githubLogin" class="github-login">使用 GitHub 登录</button></div>
+</section>
+<div id="appShell" hidden>
+  <header class="top reader-top">
+    <a class="brand" href="./">← 我的笔记</a>
+    <nav><span class="cloud-user" data-cloud-user></span><a id="editArticle" class="button small" hidden>重新编辑这篇文章</a><button class="logout-button" data-cloud-logout>退出</button></nav>
+  </header>
+  <div class="article-reader-layout">
+    <aside class="reader-outline-pane">
+      <div class="outline-head"><strong>导航窗格</strong><span>按标题生成</span></div>
+      <div id="readerOutline" class="outline-list"></div>
+    </aside>
+    <main class="reader-main">
+      <article class="reader-paper">
+        <span id="articleDate" class="eyebrow"></span>
+        <h1 id="articleTitle"></h1>
+        <div id="articleBody" class="prose"></div>
+      </article>
+    </main>
+  </div>
+</div>
+<script src="vendor/supabase.js"></script><script src="cloud-config.js"></script><script src="structure.js?v=20260724-reader1"></script><script src="cloud.js?v=20260724-3"></script>
+</body>
+</html>
