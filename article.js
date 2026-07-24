@@ -47,8 +47,11 @@ async function boot(){
   title.textContent=note.title||'无标题文章';
   date.textContent=new Date(note.publishedAt||note.updated||Date.now()).toLocaleDateString('zh-CN');
   body.innerHTML=structured.html||'';
+  body.querySelectorAll('img').forEach(image=>{image.loading='lazy';image.decoding='async';image.fetchPriority='low'});
   edit.href='editor.html?id='+encodeURIComponent(note.id)+(note.legacy?'&legacy=1':'');
-  edit.hidden=false;buildOutline();
+  edit.hidden=false;
+  const schedule=window.requestIdleCallback||((callback)=>setTimeout(callback,0));
+  schedule(buildOutline);
   await persistStructuredNote(note,structured)
 }
 boot().catch(e=>{console.error(e);title.textContent='文章读取失败';body.innerHTML='<p>'+esc(e.message||String(e))+'</p>';edit.hidden=true});
