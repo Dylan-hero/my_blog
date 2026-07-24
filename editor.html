@@ -2,9 +2,9 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps2">
+<title>写作台 · 我的笔记</title><link rel="stylesheet" href="styles.css?v=20260724-wps3">
 </head>
-<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps2">
+<body class="editor-page private-blog" data-main="editor.js?v=20260724-wps3">
 <section id="authGate" class="auth-gate" hidden>
   <div class="auth-card"><span class="auth-mark">私人写作台</span><h1>我的笔记</h1><p id="authMessage">使用你的GitHub账号登录后，才能编辑和同步文章。</p><button id="githubLogin" class="github-login">使用 GitHub 登录</button><small>只有账号 Dylan-hero 可以进入</small></div>
 </section><div id="appShell" hidden>
@@ -99,12 +99,38 @@
   </div>
 </section>
 <div id="tableTools" class="table-tools" hidden>
-  <div id="tableSelectionFrame" class="table-selection-frame"></div>
+  <div id="tableSelectionFrame" class="table-selection-frame">
+    <button class="table-scale-handle corner-nw" data-corner="nw" type="button" title="拖动缩放整张表格"></button>
+    <button class="table-scale-handle corner-ne" data-corner="ne" type="button" title="拖动缩放整张表格"></button>
+    <button class="table-scale-handle corner-sw" data-corner="sw" type="button" title="拖动缩放整张表格"></button>
+    <button class="table-scale-handle corner-se" data-corner="se" type="button" title="拖动缩放整张表格"></button>
+  </div>
   <button id="tableMoveHandle" class="table-move-handle" type="button" title="选择整张表格；双击打开表格属性">⠿</button>
   <button id="quickAddCol" class="table-quick-add table-quick-add-col" type="button" title="在右侧添加一列">＋</button>
   <button id="quickAddRow" class="table-quick-add table-quick-add-row" type="button" title="在下方添加一行">＋</button>
+  <div id="tableCellSelectionLayer" class="table-cell-selection-layer"></div>
   <div id="tableResizeGuide" class="table-resize-guide"></div>
 </div>
+<section id="tableContextMenu" class="table-context-menu" hidden>
+  <div class="table-context-toolbar">
+    <select id="ctxFontFamily" title="字体"><option value="Microsoft YaHei">微软雅黑</option><option value="SimSun">宋体</option><option value="KaiTi">楷体</option><option value="SimHei">黑体</option><option value="Arial">Arial</option><option value="Consolas">Consolas</option></select>
+    <select id="ctxFontSize" title="字号"><option value="9">9</option><option value="9.5">9.5</option><option value="10.5">10.5</option><option value="12">12</option><option value="14">14</option><option value="16">16</option><option value="18">18</option><option value="22">22</option></select>
+    <button id="ctxBold" type="button" title="粗体"><b>B</b></button><button id="ctxItalic" type="button" title="斜体"><i>I</i></button><button id="ctxUnderline" type="button" title="下划线"><u>U</u></button>
+    <label class="ctx-color" title="字体颜色">A<input id="ctxTextColor" type="color" value="#000000"></label>
+    <label class="ctx-color ctx-fill" title="单元格底色">▰<input id="ctxFillColor" type="color" value="#ffffff"></label>
+    <select id="ctxLetterSpacing" title="字符间距"><option value="0">字符间距</option><option value="-1">紧缩 1px</option><option value="0.5">加宽 0.5px</option><option value="1">加宽 1px</option><option value="2">加宽 2px</option><option value="3">加宽 3px</option></select>
+    <select id="ctxLineHeight" title="行距"><option value="1">1.0 倍</option><option value="1.15">1.15 倍</option><option value="1.5">1.5 倍</option><option value="1.75">1.75 倍</option><option value="2">2.0 倍</option></select>
+  </div>
+  <div class="table-context-align"><span>对齐</span><button data-cell-align="left" type="button">左</button><button data-cell-align="center" type="button">中</button><button data-cell-align="right" type="button">右</button><button data-cell-valign="top" type="button">顶</button><button data-cell-valign="middle" type="button">垂直居中</button><button data-cell-valign="bottom" type="button">底</button></div>
+  <div class="table-context-actions">
+    <button data-table-menu="insert-row" type="button">＋ 在下方插入行</button><button data-table-menu="insert-col" type="button">＋ 在右侧插入列</button>
+    <button data-table-menu="merge" type="button">合并所选单元格</button><button data-table-menu="split" type="button">拆分当前单元格</button>
+    <button data-table-menu="clear" type="button">清空所选内容</button><button data-table-menu="select-table" type="button">选择整张表格</button>
+    <button data-table-menu="properties" type="button">表格属性…</button>
+    <button class="context-danger" data-table-menu="delete-row" type="button">删除当前行</button><button class="context-danger" data-table-menu="delete-col" type="button">删除当前列</button>
+    <button class="context-danger" data-table-menu="delete-table" type="button">删除整张表格</button>
+  </div>
+</section>
 <dialog id="tableDialog" class="table-dialog">
   <button id="tableDialogClose" class="dialog-close" type="button" aria-label="关闭">×</button>
   <h2>表格属性</h2>
