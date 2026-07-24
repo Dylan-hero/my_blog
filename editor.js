@@ -207,9 +207,22 @@ function tableAction(type){restoreSelection();const cell=currentCell()||activeTa
  if(table.isConnected)ensureColgroup(table);changed();requestAnimationFrame(updateTableTools)
 }
 
-let activeTableCell=null,tableResize=null;
-function logicalColumnIndex(cell){let index=0;for(const sibling of cell.parentElement.cells){if(sibling===cell)break;index+=Math.max(1,sibling.colSpan||1)}return index}
-function tableColumnCount(table){return Math.max(1,...[...table.rows].map(row=>[...row.cells].reduce((sum,cell)=>sum+Math.max(1,cell.colSpan||1),0)))}
+let activeTableCell=null,tableResize=null,tableScale=null,cellDrag=null,selectedTableCells=[],suppressTableClick=false;
+function tableCellMap(table){
+ const occupied=[],map=new Map();let columns=0;
+ [...table.rows].forEach((row,rowIndex)=>{
+   occupied[rowIndex]??=[];let column=0;
+   for(const cell of row.cells){
+     while(occupied[rowIndex][column])column++;
+     const rowSpan=Math.max(1,cell.rowSpan||1),colSpan=Math.max(1,cell.colSpan||1),bounds={rowStart:rowIndex,rowEnd:rowIndex+rowSpan-1,colStart:column,colEnd:column+colSpan-1};
+     map.set(cell,bounds);for(let r=rowIndex;r<=bounds.rowEnd;r++){occupied[r]??=[];for(let c=column;c<=bounds.colEnd;c++)occupied[r][c]=cell}
+     column+=colSpan;columns=Math.max(columns,column)
+   }
+ });
+ return{map,columns:Math.max(1,columns)}
+}
+function logicalColumnIndex(cell,grid=null){return(grid||tableCellMap(cell.closest('table'))).map.get(cell)?.colStart||0}
+function tableColumnCount(table){return tableCellMap(table).columns}
 function ensureColgroup(table){
  let group=table.querySelector(':scope > colgroup');
  if(!group){group=document.createElement('colgroup');group.dataset.userColumns='true';table.insertBefore(group,table.firstChild)}
@@ -219,8 +232,8 @@ function ensureColgroup(table){
  return group
 }
 function tableColumnCells(cell){
- const column=logicalColumnIndex(cell),table=cell.closest('table');
- return[...table.querySelectorAll('th,td')].filter(item=>{const start=logicalColumnIndex(item);return start<=column&&column<start+Math.max(1,item.colSpan||1)})
+ const table=cell.closest('table'),grid=tableCellMap(table),column=logicalColumnIndex(cell,grid);
+ return[...table.querySelectorAll('th,td')].filter(item=>{const bounds=grid.map.get(item);return bounds&&bounds.colStart<=column&&column<=bounds.colEnd})
 }
 function tableTargets(cell,scope){
  const table=cell.closest('table');
@@ -234,25 +247,123 @@ function colorHex(value,fallback='#ffffff'){
  const parts=String(value||'').match(/[\d.]+/g);if(!parts||parts.length<3||Number(parts[3])===0)return fallback;
  return'#'+parts.slice(0,3).map(value=>Math.max(0,Math.min(255,Math.round(Number(value)))).toString(16).padStart(2,'0')).join('')
 }
+function cellGridBounds(cell,grid=null){return(grid||tableCellMap(cell.closest('table'))).map.get(cell)||{rowStart:0,rowEnd:0,colStart:0,colEnd:0}}
+function currentTableCells(){
+ const valid=selectedTableCells.filter(cell=>cell?.isConnected&&cell.closest('table')===activeTableCell?.closest('table'));
+ return valid.length?valid:activeTableCell?.isConnected?[activeTableCell]:[]
+}
+function updateCellSelectionOverlay(){
+ const layer=$('#tableCellSelectionLayer');if(!layer)return;layer.innerHTML='';
+ selectedTableCells=selectedTableCells.filter(cell=>cell?.isConnected);
+ for(const cell of selectedTableCells){
+   const rect=cell.getBoundingClientRect();if(rect.bottom<58||rect.top>innerHeight||rect.right<0||rect.left>innerWidth)continue;
+   const box=document.createElement('div');box.className='table-cell-selection-box';
+   Object.assign(box.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});layer.appendChild(box)
+ }
+}
+function clearCellSelection(){selectedTableCells=[];$('#tableCellSelectionLayer').innerHTML=''}
+function selectCellRange(start,end){
+ const table=start?.closest('table');if(!table||end?.closest('table')!==table)return;
+ const grid=tableCellMap(table),a=cellGridBounds(start,grid),b=cellGridBounds(end,grid),rowMin=Math.min(a.rowStart,b.rowStart),rowMax=Math.max(a.rowEnd,b.rowEnd),colMin=Math.min(a.colStart,b.colStart),colMax=Math.max(a.colEnd,b.colEnd);
+ selectedTableCells=[...table.querySelectorAll('th,td')].filter(cell=>{const x=cellGridBounds(cell,grid);return x.rowStart<=rowMax&&x.rowEnd>=rowMin&&x.colStart<=colMax&&x.colEnd>=colMin});
+ activeTableCell=end;updateCellSelectionOverlay()
+}
+function selectWholeTable(table=activeTableCell?.closest('table')){
+ if(!table)return;selectedTableCells=[...table.querySelectorAll('th,td')];activeTableCell=selectedTableCells[0]||null;updateCellSelectionOverlay();updateTableTools()
+}
+function hideTableContextMenu(){$('#tableContextMenu').hidden=true}
+function openTableContextMenu(x,y){
+ const menu=$('#tableContextMenu');menu.hidden=false;
+ const width=menu.offsetWidth||430,height=menu.offsetHeight||520;
+ menu.style.left=Math.max(8,Math.min(x,innerWidth-width-8))+'px';menu.style.top=Math.max(8,Math.min(y,innerHeight-height-8))+'px'
+}
+function syncTableContextToolbar(cell){
+ const style=getComputedStyle(cell),family=[...$('#ctxFontFamily').options].find(option=>style.fontFamily.toLowerCase().includes(option.value.toLowerCase()));
+ if(family)$('#ctxFontFamily').value=family.value;
+ const points=parseFloat(style.fontSize)*.75,sizes=[9,9.5,10.5,12,14,16,18,22];$('#ctxFontSize').value=String(sizes.reduce((best,value)=>Math.abs(value-points)<Math.abs(best-points)?value:best,10.5));
+ $('#ctxTextColor').value=colorHex(style.color,'#000000');$('#ctxFillColor').value=colorHex(style.backgroundColor,'#ffffff');
+ const spacing=parseFloat(style.letterSpacing)||0,spacingOptions=[-1,0,.5,1,2,3];$('#ctxLetterSpacing').value=String(spacingOptions.reduce((best,value)=>Math.abs(value-spacing)<Math.abs(best-spacing)?value:best,0));
+ const ratio=parseFloat(style.lineHeight)/Math.max(1,parseFloat(style.fontSize)),lineOptions=[1,1.15,1.5,1.75,2];$('#ctxLineHeight').value=String(lineOptions.reduce((best,value)=>Math.abs(value-ratio)<Math.abs(best-ratio)?value:best,1.5))
+}
+function applySelectedCellStyle(property,value){
+ const cells=currentTableCells();if(!cells.length)return;cells.forEach(cell=>cell.style[property]=value);changed();updateCellSelectionOverlay()
+}
+function toggleSelectedCellStyle(property,onValue,offValue){
+ const cells=currentTableCells();if(!cells.length)return;const current=getComputedStyle(cells[0])[property],enabled=property==='fontWeight'?Number(current)>=600:current===onValue;
+ applySelectedCellStyle(property,enabled?offValue:onValue)
+}
+function mergeSelectedCells(){
+ const cells=currentTableCells();if(cells.length<2){alert('请先拖动选择两个或更多单元格。');return}
+ if(cells.some(cell=>(cell.rowSpan||1)!==1||(cell.colSpan||1)!==1)){alert('当前选区包含已经合并的单元格，请先拆分后再合并。');return}
+ const grid=tableCellMap(cells[0].closest('table')),positions=cells.map(cell=>({...cellGridBounds(cell,grid),cell})),rowMin=Math.min(...positions.map(x=>x.rowStart)),rowMax=Math.max(...positions.map(x=>x.rowStart)),colMin=Math.min(...positions.map(x=>x.colStart)),colMax=Math.max(...positions.map(x=>x.colStart));
+ if(cells.length!==(rowMax-rowMin+1)*(colMax-colMin+1)){alert('请选择一个完整的矩形区域后再合并。');return}
+ const first=positions.find(x=>x.rowStart===rowMin&&x.colStart===colMin)?.cell;if(!first)return;
+ const extra=cells.filter(cell=>cell!==first).map(cell=>cell.innerHTML.trim()).filter(html=>html&&html!=='<br>');
+ if(extra.length){if(first.innerHTML.trim()&&first.innerHTML.trim()!=='<br>')first.insertAdjacentHTML('beforeend','<br>');first.insertAdjacentHTML('beforeend',extra.join('<br>'))}
+ first.rowSpan=rowMax-rowMin+1;first.colSpan=colMax-colMin+1;cells.filter(cell=>cell!==first).forEach(cell=>cell.remove());
+ selectedTableCells=[first];selectCell(first);changed();requestAnimationFrame(()=>{updateTableTools();updateCellSelectionOverlay()})
+}
+function insertCellAtLogicalColumn(row,column,tag='td'){
+ const cell=document.createElement(tag);cell.innerHTML='<br>',grid=tableCellMap(row.closest('table'));const before=[...row.cells].find(item=>logicalColumnIndex(item,grid)>=column);before?row.insertBefore(cell,before):row.appendChild(cell);return cell
+}
+function splitActiveCell(){
+ const cell=activeTableCell?.isConnected?activeTableCell:null;if(!cell)return;
+ const table=cell.closest('table'),bounds=cellGridBounds(cell),rows=Math.max(1,cell.rowSpan||1),cols=Math.max(1,cell.colSpan||1);
+ if(rows===1&&cols===1){alert('当前单元格没有被合并，无需拆分。');return}
+ cell.rowSpan=1;cell.colSpan=1;const created=[cell],tag=cell.tagName.toLowerCase();
+ for(let rowOffset=0;rowOffset<rows;rowOffset++){
+   const row=table.rows[bounds.rowStart+rowOffset];if(!row)continue;
+   for(let colOffset=0;colOffset<cols;colOffset++){if(rowOffset===0&&colOffset===0)continue;created.push(insertCellAtLogicalColumn(row,bounds.colStart+colOffset,tag))}
+ }
+ selectedTableCells=created;changed();requestAnimationFrame(()=>{updateTableTools();updateCellSelectionOverlay()})
+}
+function runTableContextAction(action){
+ if(action==='insert-row'){selectCell(activeTableCell);tableAction('addRow')}
+ else if(action==='insert-col'){selectCell(activeTableCell);tableAction('addCol')}
+ else if(action==='merge')mergeSelectedCells();
+ else if(action==='split')splitActiveCell();
+ else if(action==='clear'){currentTableCells().forEach(cell=>cell.innerHTML='<br>');changed()}
+ else if(action==='select-table')selectWholeTable();
+ else if(action==='properties'){hideTableContextMenu();selectCell(activeTableCell);openTableDialog();return}
+ else if(action==='delete-row'){selectCell(activeTableCell);tableAction('delRow');clearCellSelection()}
+ else if(action==='delete-col'){selectCell(activeTableCell);tableAction('delCol');clearCellSelection()}
+ else if(action==='delete-table'){selectCell(activeTableCell);tableAction('delTable');clearCellSelection()}
+ hideTableContextMenu()
+}
 function tableAlignment(table){
  if(table.dataset.tableAlign)return table.dataset.tableAlign;
  const style=getComputedStyle(table);if(style.marginLeft==='auto'&&style.marginRight==='auto')return'center';if(style.marginLeft==='auto')return'right';return'left'
 }
-function hideTableTools(){$('#tableTools').hidden=true;$('#tableResizeGuide').className='table-resize-guide'}
+function hideTableTools(clearSelection=true){$('#tableTools').hidden=true;$('#tableResizeGuide').className='table-resize-guide';if(clearSelection)clearCellSelection()}
 function updateTableTools(){
  const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!cell||!table){hideTableTools();return}
- const rect=table.getBoundingClientRect(),tools=$('#tableTools');if(rect.bottom<58||rect.top>innerHeight||rect.right<0||rect.left>innerWidth){tools.hidden=true;return}
+ const rect=table.getBoundingClientRect(),tools=$('#tableTools');if(rect.bottom<58||rect.top>innerHeight||rect.right<0||rect.left>innerWidth){tools.hidden=true;$('#tableCellSelectionLayer').innerHTML='';return}
  tools.hidden=false;const frame=$('#tableSelectionFrame'),move=$('#tableMoveHandle'),addCol=$('#quickAddCol'),addRow=$('#quickAddRow');
  Object.assign(frame.style,{left:rect.left+'px',top:rect.top+'px',width:rect.width+'px',height:rect.height+'px'});
  Object.assign(move.style,{left:Math.max(4,rect.left-27)+'px',top:Math.max(62,rect.top-27)+'px'});
  Object.assign(addCol.style,{left:Math.max(4,Math.min(innerWidth-29,rect.right+6))+'px',top:Math.max(62,Math.min(innerHeight-30,rect.top+rect.height/2-13))+'px'});
- Object.assign(addRow.style,{left:Math.max(4,Math.min(innerWidth-29,rect.left+rect.width/2-13))+'px',top:Math.max(62,Math.min(innerHeight-30,rect.bottom+6))+'px'})
+ Object.assign(addRow.style,{left:Math.max(4,Math.min(innerWidth-29,rect.left+rect.width/2-13))+'px',top:Math.max(62,Math.min(innerHeight-30,rect.bottom+6))+'px'});updateCellSelectionOverlay()
 }
 function showTableTools(cell){if(!cell?.isConnected)return;activeTableCell=cell;updateTableTools()}
 function showResizeGuide(cell,mode,coordinate){
  const guide=$('#tableResizeGuide'),table=cell.closest('table'),rect=table.getBoundingClientRect(),cellRect=cell.getBoundingClientRect();guide.className='table-resize-guide '+mode;
  if(mode==='column')Object.assign(guide.style,{left:(coordinate??cellRect.right)+'px',top:rect.top+'px',width:'2px',height:rect.height+'px'});
  else Object.assign(guide.style,{left:rect.left+'px',top:(coordinate??cellRect.bottom)+'px',width:rect.width+'px',height:'2px'})
+}
+function columnPixelWidths(table,count){
+ const widths=Array(count).fill(0),fallback=table.getBoundingClientRect().width/Math.max(1,count),grid=tableCellMap(table);
+ for(const cell of table.querySelectorAll('th,td')){
+   const start=logicalColumnIndex(cell,grid),span=Math.max(1,cell.colSpan||1),width=cell.getBoundingClientRect().width/span;
+   for(let index=start;index<Math.min(count,start+span);index++)if(!widths[index])widths[index]=width
+ }
+ return widths.map(width=>width||fallback)
+}
+function beginTableScale(event){
+ const cell=activeTableCell?.isConnected?activeTableCell:null,table=cell?.closest('table');if(!cell||!table)return;
+ event.preventDefault();event.stopPropagation();hideTableContextMenu();
+ const rect=table.getBoundingClientRect(),count=tableColumnCount(table),group=ensureColgroup(table),columnWidths=columnPixelWidths(table,count),rowHeights=[...table.rows].map(row=>row.getBoundingClientRect().height);
+ columnWidths.forEach((width,index)=>{if(group.children[index])group.children[index].style.width=width+'px'});
+ tableScale={corner:event.currentTarget.dataset.corner,startX:event.clientX,startY:event.clientY,startWidth:rect.width,startHeight:rect.height,table,group,columnWidths,rowHeights}
 }
 function closeTableDialog(){const dialog=$('#tableDialog');if(typeof dialog.close==='function')dialog.close();else dialog.removeAttribute('open')}
 function openTableDialog(){
@@ -314,26 +425,51 @@ function resizeEdge(event,cell){
  return''
 }
 content.addEventListener('pointermove',event=>{
- if(tableResize)return;const cell=event.target.closest?.('td,th');const mode=cell?resizeEdge(event,cell):'';
+ if(tableResize||tableScale||cellDrag?.moved)return;const cell=event.target.closest?.('td,th');const mode=cell?resizeEdge(event,cell):'';
  content.style.cursor=mode==='column'?'col-resize':mode==='row'?'row-resize':'';if(mode)showResizeGuide(cell,mode);else $('#tableResizeGuide').className='table-resize-guide'
 });
-content.addEventListener('pointerleave',()=>{if(!tableResize){content.style.cursor='';$('#tableResizeGuide').className='table-resize-guide'}});
+content.addEventListener('pointerleave',()=>{if(!tableResize&&!tableScale){content.style.cursor='';$('#tableResizeGuide').className='table-resize-guide'}});
 content.addEventListener('pointerdown',event=>{
- if(event.button!==0)return;const cell=event.target.closest?.('td,th'),mode=cell?resizeEdge(event,cell):'';if(!mode)return;
- event.preventDefault();showTableTools(cell);const table=cell.closest('table'),rect=cell.getBoundingClientRect();
- if(mode==='column'){
-   const group=ensureColgroup(table),column=logicalColumnIndex(cell),col=group.children[column],startSize=rect.width/Math.max(1,cell.colSpan||1);
-   tableResize={mode,start:event.clientX,startSize,startTableWidth:table.getBoundingClientRect().width,table,col}
- }else tableResize={mode,start:event.clientY,startSize:cell.parentElement.getBoundingClientRect().height,row:cell.parentElement}
+ if(event.button!==0)return;const cell=event.target.closest?.('td,th');if(!cell)return;const mode=resizeEdge(event,cell);showTableTools(cell);hideTableContextMenu();
+ if(mode){
+   event.preventDefault();const table=cell.closest('table'),rect=cell.getBoundingClientRect();
+   if(mode==='column'){
+     const group=ensureColgroup(table),column=logicalColumnIndex(cell),col=group.children[column],startSize=rect.width/Math.max(1,cell.colSpan||1);
+     tableResize={mode,start:event.clientX,startSize,startTableWidth:table.getBoundingClientRect().width,table,col}
+   }else tableResize={mode,start:event.clientY,startSize:cell.parentElement.getBoundingClientRect().height,row:cell.parentElement}
+   return
+ }
+ clearCellSelection();cellDrag={startCell:cell,lastCell:cell,startX:event.clientX,startY:event.clientY,moved:false}
 });
 document.addEventListener('pointermove',event=>{
- if(!tableResize)return;
- if(tableResize.mode==='column'){
+ if(tableScale){
+   event.preventDefault();const horizontal=(tableScale.corner.includes('e')?event.clientX-tableScale.startX:tableScale.startX-event.clientX),vertical=(tableScale.corner.includes('s')?event.clientY-tableScale.startY:tableScale.startY-event.clientY);
+   const width=Math.max(160,tableScale.startWidth+horizontal),height=Math.max(tableScale.rowHeights.length*24,tableScale.startHeight+vertical),scaleX=width/tableScale.startWidth,scaleY=height/tableScale.startHeight;
+   tableScale.table.style.width=width+'px';tableScale.table.style.minWidth='0';tableScale.table.style.maxWidth='none';tableScale.table.style.tableLayout='fixed';
+   tableScale.columnWidths.forEach((value,index)=>{if(tableScale.group.children[index])tableScale.group.children[index].style.width=Math.max(32,value*scaleX)+'px'});
+   [...tableScale.table.rows].forEach((row,index)=>row.style.height=Math.max(24,(tableScale.rowHeights[index]||24)*scaleY)+'px');updateTableTools();return
+ }
+ if(tableResize){
+  if(tableResize.mode==='column'){
    const size=Math.max(40,Math.min(800,tableResize.startSize+event.clientX-tableResize.start)),delta=size-tableResize.startSize;
    tableResize.col.style.width=size+'px';tableResize.table.style.tableLayout='fixed';tableResize.table.style.width=Math.max(120,tableResize.startTableWidth+delta)+'px';tableResize.table.style.maxWidth='none';showResizeGuide(activeTableCell,'column',event.clientX)
- }else{tableResize.row.style.height=Math.max(24,Math.min(500,tableResize.startSize+event.clientY-tableResize.start))+'px';showResizeGuide(activeTableCell,'row',event.clientY)}
+  }else{tableResize.row.style.height=Math.max(24,Math.min(500,tableResize.startSize+event.clientY-tableResize.start))+'px';showResizeGuide(activeTableCell,'row',event.clientY)}
+  return
+ }
+ if(cellDrag&&event.buttons===1){
+   const target=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('td,th');
+   if(!target||target.closest('table')!==cellDrag.startCell.closest('table'))return;
+   const distance=Math.hypot(event.clientX-cellDrag.startX,event.clientY-cellDrag.startY);
+   if(target!==cellDrag.startCell||distance>8){event.preventDefault();cellDrag.moved=true;cellDrag.lastCell=target;selectCellRange(cellDrag.startCell,target)}
+ }
 });
-document.addEventListener('pointerup',()=>{if(!tableResize)return;tableResize=null;content.style.cursor='';$('#tableResizeGuide').className='table-resize-guide';changed();requestAnimationFrame(updateTableTools)});
+document.addEventListener('pointerup',()=>{
+ let edited=false;
+ if(tableScale){tableScale=null;edited=true}
+ if(tableResize){tableResize=null;edited=true}
+ if(cellDrag){if(cellDrag.moved){suppressTableClick=true;selectCell(cellDrag.lastCell)}else clearCellSelection();cellDrag=null}
+ content.style.cursor='';$('#tableResizeGuide').className='table-resize-guide';if(edited)changed();requestAnimationFrame(updateTableTools)
+});
 
 function getBlocksInSelection(){const r=getRange(),all=[...content.querySelectorAll('p,div,h1,h2,h3,h4,blockquote,li,td,th')];const hit=all.filter(x=>{try{return r.intersectsNode(x)}catch{return false}});if(hit.length)return hit.filter(x=>!hit.some(y=>y!==x&&y.contains(x)));let n=r.startContainer.nodeType===3?r.startContainer.parentElement:r.startContainer;return[n.closest('p,div,h1,h2,h3,h4,blockquote,li,td,th')||content]}
 function applyLineHeight(value){restoreSelection();getBlocksInSelection().forEach(x=>x.style.lineHeight=value);changed()}
@@ -358,11 +494,33 @@ $('#tocBtn').onclick=insertOrUpdateTOC;
 $('#addRowBtn').onclick=()=>tableAction('addRow');$('#addColBtn').onclick=()=>tableAction('addCol');$('#delRowBtn').onclick=()=>tableAction('delRow');$('#delColBtn').onclick=()=>tableAction('delCol');$('#delTableBtn').onclick=()=>tableAction('delTable');
 $('#tablePropsBtn').onclick=openTableDialog;$('#tableDialogClose').onclick=closeTableDialog;$('#tableApplyBtn').onclick=applyTableProperties;$('#tableResetBtn').onclick=resetTableSizing;
 $('#quickAddCol').onclick=()=>{selectCell(activeTableCell);tableAction('addCol')};$('#quickAddRow').onclick=()=>{selectCell(activeTableCell);tableAction('addRow')};
-$('#tableMoveHandle').onclick=()=>{selectCell(activeTableCell);$('#tableScope').value='table'};$('#tableMoveHandle').ondblclick=openTableDialog;
-content.addEventListener('click',e=>{const cell=e.target.closest('td,th');if(cell)showTableTools(cell);else if(!e.target.closest('table'))hideTableTools();const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}});
-document.addEventListener('pointerdown',e=>{if(!$('#tablePicker').hidden&&!e.target.closest('#tablePicker')&&!e.target.closest('#tableBtn'))hideTablePicker()});
+$('#tableMoveHandle').onclick=()=>{selectWholeTable();$('#tableScope').value='table'};$('#tableMoveHandle').ondblclick=openTableDialog;
+document.querySelectorAll('.table-scale-handle').forEach(handle=>handle.onpointerdown=beginTableScale);
+content.addEventListener('click',e=>{
+ if(suppressTableClick){suppressTableClick=false;e.preventDefault();return}
+ const cell=e.target.closest('td,th');if(cell){clearCellSelection();showTableTools(cell)}else if(!e.target.closest('table'))hideTableTools();
+ const a=e.target.closest('.doc-toc a');if(a){e.preventDefault();content.querySelector(a.getAttribute('href'))?.scrollIntoView({behavior:'smooth',block:'center'})}
+});
+content.addEventListener('contextmenu',e=>{
+ const cell=e.target.closest('td,th');if(!cell)return;e.preventDefault();showTableTools(cell);
+ if(!selectedTableCells.includes(cell)){selectedTableCells=[cell];activeTableCell=cell;updateCellSelectionOverlay()}
+ syncTableContextToolbar(cell);openTableContextMenu(e.clientX,e.clientY)
+});
+$('#ctxFontFamily').onchange=e=>applySelectedCellStyle('fontFamily',e.target.value);
+$('#ctxFontSize').onchange=e=>applySelectedCellStyle('fontSize',e.target.value+'pt');
+$('#ctxBold').onclick=()=>toggleSelectedCellStyle('fontWeight','700','400');$('#ctxItalic').onclick=()=>toggleSelectedCellStyle('fontStyle','italic','normal');$('#ctxUnderline').onclick=()=>toggleSelectedCellStyle('textDecorationLine','underline','none');
+$('#ctxTextColor').oninput=e=>applySelectedCellStyle('color',e.target.value);$('#ctxFillColor').oninput=e=>applySelectedCellStyle('backgroundColor',e.target.value);
+$('#ctxLetterSpacing').onchange=e=>applySelectedCellStyle('letterSpacing',e.target.value+'px');$('#ctxLineHeight').onchange=e=>applySelectedCellStyle('lineHeight',e.target.value);
+document.querySelectorAll('[data-cell-align]').forEach(button=>button.onclick=()=>applySelectedCellStyle('textAlign',button.dataset.cellAlign));
+document.querySelectorAll('[data-cell-valign]').forEach(button=>button.onclick=()=>applySelectedCellStyle('verticalAlign',button.dataset.cellValign));
+$('#tableContextMenu').onclick=e=>{const button=e.target.closest('[data-table-menu]');if(button)runTableContextAction(button.dataset.tableMenu)};
+document.addEventListener('pointerdown',e=>{
+ if(!$('#tablePicker').hidden&&!e.target.closest('#tablePicker')&&!e.target.closest('#tableBtn'))hideTablePicker();
+ if(!$('#tableContextMenu').hidden&&!e.target.closest('#tableContextMenu')&&!e.target.closest('td,th'))hideTableContextMenu()
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hideTablePicker();hideTableContextMenu()}});
 let tableToolFrame=0;const queueTableToolUpdate=()=>{if(tableToolFrame)return;tableToolFrame=requestAnimationFrame(()=>{tableToolFrame=0;updateTableTools()})};
-document.addEventListener('scroll',queueTableToolUpdate,true);window.addEventListener('resize',()=>{hideTablePicker();queueTableToolUpdate()});
+document.addEventListener('scroll',()=>{hideTableContextMenu();queueTableToolUpdate()},true);window.addEventListener('resize',()=>{hideTablePicker();hideTableContextMenu();queueTableToolUpdate()});
 autoSaveToggle.checked=autoSave;
 autoSaveToggle.onchange=()=>{autoSave=autoSaveToggle.checked;localStorage.setItem(AUTO_KEY,String(autoSave));if(autoSave){status.textContent='正在自动保存…';save()}else status.textContent=dirty?'有未保存更改':savedLabel()};
 $('#saveBtn').onclick=async()=>{clearTimeout(saveTimer);if(save()){const ok=await lastCloudSync;if(!ok)alert('当前电脑已保存，但云端同步失败，请稍后再按一次 Ctrl+S。')}};
