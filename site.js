@@ -3,14 +3,14 @@ const samples=[
  {id:'welcome',title:'欢迎来到我的笔记',body:'<p>这是你的个人记录空间。点击右上角“开始写作”，就可以像使用 Word 一样编辑内容。</p><h2>可以做什么？</h2><p>自动保存、撤销重做，以及把文章显示在首页。</p>',updated:Date.now(),published:true},
  {id:'sample2',title:'从记录开始',body:'<p>不必等到想法完整才落笔。先写下一句话，知识会在反复整理中慢慢形成。</p>',updated:Date.now()-86400000,published:true}
 ];
-function storedNotes(){try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:[]}catch{return[]}}
+function storedNotes(){if(Array.isArray(window.__CLOUD_NOTES__))return window.__CLOUD_NOTES__;try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:[]}catch{return[]}}
 function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBody'in n)}
 function draftTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n.title||'')}
 function draftBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n.body||'')}
 const box=document.querySelector('#posts'),dlg=document.querySelector('#reader');
 let view='published',stored=[],usingSamples=true,published=[],drafts=[];
 function reloadData(){
- stored=storedNotes();usingSamples=!stored.length;
+ stored=storedNotes();usingSamples=!window.__PRIVATE_MODE__&&!stored.length;
  published=(usingSamples?samples:stored.filter(n=>n.published)).sort((a,b)=>b.updated-a.updated);
  drafts=stored.filter(n=>!n.published||hasDraft(n)).sort((a,b)=>b.updated-a.updated);
  publishedCount.textContent=published.length;draftCount.textContent=drafts.length;render();
@@ -30,6 +30,7 @@ box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return(d.textContent||'').trim()}
 document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
-window.addEventListener('pageshow',reloadData);window.addEventListener('focus',reloadData);
+let cloudRefreshing=false;async function refreshAll(){if(cloudRefreshing)return;cloudRefreshing=true;try{if(window.__PRIVATE_MODE__&&window.blogCloud)await window.blogCloud.refresh()}catch(e){console.warn(e)}cloudRefreshing=false;reloadData()}
+window.addEventListener('pageshow',refreshAll);window.addEventListener('focus',refreshAll);
 window.addEventListener('storage',e=>{if(e.key===KEY)reloadData()});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)reloadData()});reloadData();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshAll()});reloadData();
