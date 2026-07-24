@@ -93,3 +93,11 @@
 .table-context-actions [data-table-menu="properties"],.table-context-actions [data-table-menu="delete-table"]{grid-column:1/-1}
 .table-context-actions .context-danger{color:#a62d27}.table-context-actions .context-danger:hover{background:#fff0ef}
 @media(max-width:520px){.table-context-menu{width:min(430px,calc(100vw - 16px))}}
+
+/* Reachable side handles and readable content while resizing wide tables */
+.table-edge-handle{position:fixed;z-index:39;border:2px solid #fff;border-radius:5px;background:#217cff;box-shadow:0 0 0 1px #217cff;pointer-events:auto;padding:0}
+.table-edge-handle.edge-w,.table-edge-handle.edge-e{width:10px;height:42px;cursor:ew-resize}
+.table-edge-handle.edge-n,.table-edge-handle.edge-s{width:42px;height:10px;cursor:ns-resize}
+.table-edge-handle:hover{background:#0b67e0;box-shadow:0 0 0 2px #81b5ff}
+.editor-page #content th,.editor-page #content td,.editor-page #content th *,.editor-page #content td *{max-width:100%;white-space:normal!important;word-break:normal;overflow-wrap:break-word}
+.editor-page .prose table[data-restored-table="3.2-3.3"] td:nth-child(2),.editor-page .prose table[data-restored-table="3.2-3.3"] td:nth-child(3){white-space:normal}
