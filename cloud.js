@@ -27,7 +27,11 @@ async function boot(){
   if(String(name).toLowerCase()!=='dylan-hero'){await client.auth.signOut();gate.hidden=false;shell.hidden=true;const msg=document.getElementById('authMessage');if(msg)msg.textContent='该GitHub账号不是此私人博客的所有者。';return}
   const msg=document.getElementById('authMessage');if(msg)msg.textContent='正在读取私人云端…';
   let notes=await loadNotes(),local=getLocal();
-  if(!notes.length&&local.length&&confirm('发现当前浏览器中有 '+local.length+' 篇本地文章。是否立即迁移到私人云端？')){notes=await migrateLocal(local);alert('本地文章已迁移到私人云端。')}
+  if(local.length&&!localStorage.getItem('my_blog_precloud_backup'))localStorage.setItem('my_blog_precloud_backup',JSON.stringify(local));
+  if(!notes.length&&local.length){
+    if(!confirm('发现当前浏览器中有 '+local.length+' 篇本地文章。必须先迁移到私人云端才能继续，是否现在迁移？')){if(msg)msg.textContent='本地文章已保留，尚未迁移。刷新页面后可重新选择。';gate.hidden=false;shell.hidden=true;return}
+    notes=await migrateLocal(local);alert('本地文章已迁移到私人云端，并保留了一份迁移前备份。')
+  }
   window.__PRIVATE_MODE__=true;window.__CLOUD_NOTES__=notes;localStorage.setItem(LOCAL_KEY,JSON.stringify(notes));
   document.querySelectorAll('[data-cloud-user]').forEach(x=>x.textContent=name);
   document.querySelectorAll('[data-cloud-logout]').forEach(x=>x.onclick=signOut);
