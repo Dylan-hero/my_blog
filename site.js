@@ -11,7 +11,7 @@ function hasDraft(n){return n&&(n.draftSaved===true||'draftTitle'in n||'draftBod
 function draftTitle(n){return n&&'draftTitle'in n?(n.draftTitle||''):(n.title||'')}
 function draftBody(n){return n&&'draftBody'in n?(n.draftBody||''):(n.body||'')}
 function normalizeTitle(s){return String(s||'').replace(/\\s+/g,'').toLowerCase()}
-const box=document.querySelector('#posts'),dlg=document.querySelector('#reader');
+const box=document.querySelector('#posts');
 let view='published',stored=[],usingSamples=true,published=[],drafts=[];
 function reloadData(){
  stored=storedNotes();usingSamples=!window.__PRIVATE_MODE__&&!stored.length;
@@ -33,10 +33,9 @@ function render(){
  }).join(''):'<div class="empty">'+(view==='published'?'还没有发布文章。':'草稿箱是空的。')+'</div>'
 }
 document.querySelectorAll('.library-tab').forEach(b=>b.onclick=()=>{view=b.dataset.view;document.querySelectorAll('.library-tab').forEach(x=>x.classList.toggle('active',x===b));render()});
-box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>String(x.id)===c.dataset.id);if(!p)return;if(p.url){location.href=p.url;return}if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}readTitle.textContent=p.title||'无标题文章';readDate.textContent=new Date(p.updated).toLocaleDateString('zh-CN');readBody.innerHTML=p.body||'';editPost.hidden=usingSamples;editPost.href='editor.html?id='+encodeURIComponent(p.id);dlg.showModal()};
+box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>String(x.id)===c.dataset.id);if(!p)return;if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}location.href='article.html?id='+encodeURIComponent(p.id)};
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return(d.textContent||'').trim()}
-document.querySelector('.close').onclick=()=>dlg.close();dlg.onclick=e=>{if(e.target===dlg)dlg.close()};
 let cloudRefreshing=false;async function refreshAll(){if(cloudRefreshing)return;cloudRefreshing=true;try{if(window.__PRIVATE_MODE__&&window.blogCloud)await window.blogCloud.refresh()}catch(e){console.warn(e)}cloudRefreshing=false;reloadData()}
 window.addEventListener('pageshow',refreshAll);window.addEventListener('focus',refreshAll);
 window.addEventListener('storage',e=>{if(e.key===KEY)reloadData()});
