@@ -15,7 +15,7 @@ function githubName(user){const m=user?.user_metadata||{},g=(user?.identities||[
 function showFatal(message){const g=document.getElementById('authGate');if(g){g.hidden=false;g.innerHTML='<div class="auth-card"><h1>连接失败</h1><p>'+escapeHtml(message)+'</p></div>'}}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function loadMain(){const src=document.body.dataset.main;if(!src)return;const s=document.createElement('script');s.src=src;s.onerror=()=>showFatal('页面程序加载失败，请强制刷新。');document.body.appendChild(s)}
-async function signIn(){const redirectTo=location.origin+location.pathname;const{error}=await client.auth.signInWithOAuth({provider:'github',options:{redirectTo}});if(error)alert('GitHub登录失败：'+error.message)}
+async function signIn(){const redirectTo=location.origin+location.pathname+location.search;const{error}=await client.auth.signInWithOAuth({provider:'github',options:{redirectTo}});if(error)alert('GitHub登录失败：'+error.message)}
 async function signOut(){await client.auth.signOut();localStorage.removeItem('dylan-private-blog-auth');location.reload()}
 async function boot(){
  const gate=document.getElementById('authGate'),shell=document.getElementById('appShell'),login=document.getElementById('githubLogin');
