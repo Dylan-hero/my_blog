@@ -10,6 +10,7 @@
     .article-page{max-width:920px;margin:auto;padding:52px 24px 90px}
     .article-page article{background:#fffdf9;border:1px solid #e3ddd2;border-radius:10px;padding:clamp(26px,6vw,70px);box-shadow:0 12px 40px #32291d12}
     .article-page h1{font:700 clamp(34px,5vw,54px)/1.15 Georgia,serif;margin:14px 0 32px}
+    .source-note{margin-top:30px;padding-top:18px;border-top:1px solid #e3ddd2;color:#6f675d;font-size:.92rem}
     @media(max-width:760px){.article-page{padding:22px 12px 60px}.article-page article{padding:26px 18px}}
   </style>
 </head>
@@ -20,7 +21,8 @@
       <span class="eyebrow">MDB TEST NOTES &middot; 2026-08-13</span>
       <h1>SI6301 MDB ST 测试点摘录</h1>
       <div class="prose">
-        <p>byte mode 传输速率必须大于等于 8GT/s；CRC 启用时，DQS1_t/c 作为 CRC 信号。</p>
+        <p>byte mode 传输速率必须大于等于 8GT/s。配置 PG[70]RWF0[1] = 1 时，只使用 DQS0_t/c 作为选通信号；CRC enable 时，DQS1_t/c 作为 CRC 信号。</p>
+        <p class="source-note">摘录自“测试点”工作表的 Host Interface Strobe Modes 条目。</p>
       </div>
     </article>
   </main>
