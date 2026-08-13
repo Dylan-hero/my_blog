@@ -4,6 +4,7 @@ const samples=[
  {id:'sample2',title:'从记录开始',body:'<p>不必等到想法完整才落笔。先写下一句话，知识会在反复整理中慢慢形成。</p>',updated:Date.now()-86400000,published:true}
 ];
 const staticPosts=[
+ {id:'si6301-mdb-st-test-point',title:'SI6301 MDB ST 测试点摘录',excerpt:'byte mode 速率、DQS 选通信号与 CRC 信号配置测试点摘录。',legacy:true,url:'articles/si6301-mdb-st-test-point.html',updated:Date.UTC(2026,7,13),published:true},
  {id:'mdb-protocol-study',title:'MDB 协议学习记录',excerpt:'DDR5 MDB 协议、数据通路、初始化、CRC 与训练相关学习记录。',legacy:true,url:'articles/mdb-protocol-study.html',updated:Date.UTC(2026,6,23),published:true}
 ];
 function storedNotes(){if(Array.isArray(window.__CLOUD_NOTES__))return window.__CLOUD_NOTES__;try{const n=JSON.parse(localStorage.getItem(KEY));return Array.isArray(n)?n:[]}catch{return[]}}
@@ -35,7 +36,7 @@ function render(){
  }).join(''):'<div class="empty">'+(view==='published'?'还没有发布文章。':'草稿箱是空的。')+'</div>'
 }
 document.querySelectorAll('.library-tab').forEach(b=>b.onclick=()=>{view=b.dataset.view;document.querySelectorAll('.library-tab').forEach(x=>x.classList.toggle('active',x===b));render()});
-box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>String(x.id)===c.dataset.id);if(!p)return;if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}location.href='article.html?id='+encodeURIComponent(p.id)};
+box.onclick=e=>{const c=e.target.closest('.card');if(!c)return;const p=(view==='published'?published:drafts).find(x=>String(x.id)===c.dataset.id);if(!p)return;if(p.url){location.href=p.url;return}if(view==='drafts'){location.href='editor.html?id='+encodeURIComponent(p.id);return}location.href='article.html?id='+encodeURIComponent(p.id)};
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function strip(s){const d=document.createElement('div');d.innerHTML=s||'';return(d.textContent||'').trim()}
 let cloudRefreshing=false;async function refreshAll(){if(cloudRefreshing)return;cloudRefreshing=true;try{if(window.__PRIVATE_MODE__&&window.blogCloud)await window.blogCloud.refresh()}catch(e){console.warn(e)}cloudRefreshing=false;reloadData()}
